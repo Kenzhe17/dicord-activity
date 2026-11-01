@@ -170,13 +170,19 @@ if (process.env.NODE_ENV === 'production') {
       const protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : (process.env.NODE_ENV === 'production' ? 'https' : req.protocol);
       const serverUrl = `${protocol}://${req.get('host')}`;
       
+      const clientId = process.env.DISCORD_CLIENT_ID || '1566376251185168394';
+      const serverUrlValue = process.env.CORS_ORIGIN || serverUrl;
+      
+      console.log(`[CONFIG INJECTION] Client ID: ${clientId}, Server URL: ${serverUrlValue}`);
+      
       // Inject Discord config into HTML
       const configScript = `
         <script>
           window.__DISCORD_CONFIG = {
-            clientId: '${process.env.DISCORD_CLIENT_ID || '1566376251185168394'}',
-            serverUrl: '${process.env.CORS_ORIGIN || serverUrl}'
+            clientId: '${clientId}',
+            serverUrl: '${serverUrlValue}'
           };
+          console.log('[CONFIG] Runtime config injected:', window.__DISCORD_CONFIG);
         </script>
       `;
       
