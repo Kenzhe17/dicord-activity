@@ -24,7 +24,39 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
     await discordSdk.ready();
     console.log('Discord SDK: Ready');
     
-    const auth = await discordSdk.commands.authenticate();
+    // Step 1: Authorize with Discord to get OAuth code
+    console.log('Discord SDK: Authorizing...');
+    const { code } = await discordSdk.commands.authorize({
+      client_id: clientId,
+      response_type: 'code',
+      state: '',
+      prompt: 'none',
+      scope: ['identify'],
+    });
+    console.log('Discord SDK: Authorization code received');
+    
+    // Step 2: Exchange code for access token via backend
+    console.log('Discord SDK: Exchanging code for token...');
+    const response = await fetch('/api/auth/discord/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to exchange code for token');
+    }
+    
+    const { access_token } = await response.json();
+    console.log('Discord SDK: Access token received');
+    
+    // Step 3: Authenticate with Discord client using the access token
+    console.log('Discord SDK: Authenticating...');
+    const auth = await discordSdk.commands.authenticate({
+      access_token,
+    });
     
     console.log('Discord SDK: Authenticated', auth);
     
