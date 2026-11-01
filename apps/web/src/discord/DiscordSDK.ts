@@ -15,13 +15,16 @@ export interface DiscordAuth {
 
 export async function initializeDiscordSDK(): Promise<DiscordAuth> {
   try {
+    console.log('Discord SDK: Starting initialization...');
     await discordSdk.ready();
+    console.log('Discord SDK: Ready');
 
     const { code } = await discordSdk.commands.authorize({
       client_id: import.meta.env.VITE_DISCORD_CLIENT_ID,
       response_type: 'code',
       scope: ['identify', 'activities.read'],
     });
+    console.log('Discord SDK: Authorization code received');
 
     const response = await fetch('/api/auth/discord/token', {
       method: 'POST',
@@ -33,14 +36,17 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
 
     if (!response.ok) {
       const error = await response.json();
+      console.error('Discord SDK: Token exchange failed:', error);
       throw new Error(error.error || 'Failed to exchange code for token');
     }
 
     const { access_token } = await response.json();
+    console.log('Discord SDK: Token received');
 
     const auth = await discordSdk.commands.authenticate({
       access_token,
     });
+    console.log('Discord SDK: Authentication successful');
 
     return {
       access_token,

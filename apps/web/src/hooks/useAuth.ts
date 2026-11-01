@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { initializeDiscordSDK, getAvatarUrl, DiscordAuth, discordSdk } from '../discord/DiscordSDK';
+import { initializeDiscordSDK, getAvatarUrl, DiscordAuth } from '../discord/DiscordSDK';
 
 export function useAuth() {
   const [auth, setAuth] = useState<DiscordAuth | null>(null);
@@ -17,35 +17,15 @@ export function useAuth() {
       try {
         setLoading(true);
         console.log('Initializing Discord SDK...');
+        console.log('Client ID:', import.meta.env.VITE_DISCORD_CLIENT_ID);
+        console.log('Server URL:', import.meta.env.VITE_SERVER_URL);
         
-        // Set timeout for SDK initialization
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Discord SDK timeout')), 10000);
-        });
-        
-        const discordAuth = await Promise.race([
-          initializeDiscordSDK(),
-          timeoutPromise
-        ]) as unknown as DiscordAuth;
-        
+        const discordAuth = await initializeDiscordSDK();
         console.log('Discord auth successful:', discordAuth);
         setAuth(discordAuth);
       } catch (err) {
         console.error('Discord auth error:', err);
-        // For testing: use mock auth if SDK fails
-        const mockAuth: DiscordAuth = {
-          access_token: 'mock_token',
-          user: {
-            id: '123456789',
-            username: 'TestUser',
-            globalName: 'Test User',
-            avatar: null,
-            discriminator: '0000',
-          },
-        };
-        console.log('Using mock auth for testing:', mockAuth);
-        setAuth(mockAuth);
-        setError(null); // Clear error so UI loads
+        setError(err instanceof Error ? err.message : 'Authentication failed');
       } finally {
         setLoading(false);
       }
