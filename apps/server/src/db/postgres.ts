@@ -15,19 +15,13 @@ export async function getUser(userId: string): Promise<User | null> {
     console.log('[DB] getUser called with userId:', userId);
     console.log('[DB] userId type:', typeof userId);
 
-    // Convert Discord user_id (string) to number for bigint column
-    const userIdNum = parseInt(userId, 10);
-    console.log('[DB] Parsed userIdNum:', userIdNum, 'isNaN:', isNaN(userIdNum));
-    console.log('[DB] Precision check - original:', userId, 'parsed:', userIdNum, 'match:', userId === userIdNum.toString());
-
-    if (isNaN(userIdNum)) {
-      console.error('[DB] userId is not a valid number:', userId);
-      return null;
-    }
+    // Use BigInt to preserve full 64-bit precision for Discord snowflake IDs
+    const userIdBigInt = BigInt(userId);
+    console.log('[DB] Parsed userIdBigInt:', userIdBigInt.toString());
 
     const result = await pool.query(
       'SELECT user_id, balance FROM user_balance WHERE user_id = $1',
-      [userIdNum]
+      [userIdBigInt]
     );
     if (result.rows[0]) {
       // Convert number back to string for consistency
@@ -45,13 +39,13 @@ export async function getUser(userId: string): Promise<User | null> {
 
 export async function createUser(userId: string, initialBalance: number = 0, guildId?: string): Promise<User> {
   try {
-    // Convert Discord user_id (string) to number for bigint column
-    const userIdNum = parseInt(userId, 10);
-    const guildIdNum = guildId ? parseInt(guildId, 10) : null;
+    // Use BigInt to preserve full 64-bit precision for Discord snowflake IDs
+    const userIdBigInt = BigInt(userId);
+    const guildIdBigInt = guildId ? BigInt(guildId) : null;
 
     const result = await pool.query(
       'INSERT INTO user_balance (user_id, balance, guild_id) VALUES ($1, $2, $3) RETURNING user_id, balance',
-      [userIdNum, initialBalance, guildIdNum]
+      [userIdBigInt, initialBalance, guildIdBigInt]
     );
     // Convert number back to string for consistency
     return {
@@ -93,11 +87,11 @@ export async function updateBalance(userId: string, amount: number): Promise<Use
   }
 
   try {
-    // Convert Discord user_id (string) to number for bigint column
-    const userIdNum = parseInt(userId, 10);
+    // Use BigInt to preserve full 64-bit precision for Discord snowflake IDs
+    const userIdBigInt = BigInt(userId);
     const result = await pool.query(
       'UPDATE user_balance SET balance = balance + $1 WHERE user_id = $2 RETURNING user_id, balance',
-      [amount, userIdNum]
+      [amount, userIdBigInt]
     );
     // Convert number back to string for consistency
     return {
