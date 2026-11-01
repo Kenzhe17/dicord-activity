@@ -152,9 +152,11 @@ app.get('/api/rooms/public', (req, res) => {
 
 // Stats endpoint
 app.get('/api/stats', (req, res) => {
+  // Count all connected Socket.IO clients (not just players in rooms)
+  const connectedClients = io.sockets.sockets.size;
   res.json({
     activeRooms: RoomManager.getActiveRoomCount(),
-    totalPlayers: RoomManager.getTotalPlayerCount(),
+    totalPlayers: connectedClients,
   });
 });
 
