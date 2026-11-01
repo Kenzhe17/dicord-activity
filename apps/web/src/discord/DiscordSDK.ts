@@ -27,7 +27,13 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
     // Get user info from platform (no OAuth required)
     console.log('Discord SDK: Getting user info from platform...');
     const platform = await discordSdk.commands.platform();
-    console.log('Discord SDK: Platform info:', platform);
+    console.log('Discord SDK: Platform info:', JSON.stringify(platform, null, 2));
+
+    // Check if platform.user exists and has id
+    if (!platform.user || !platform.user.id) {
+      console.error('Discord SDK: Platform user or user.id is missing');
+      throw new Error('Platform user data not available');
+    }
 
     const userId = platform.user.id;
     const username = platform.user.username;
