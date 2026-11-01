@@ -24,34 +24,49 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
     await discordSdk.ready();
     console.log('Discord SDK: Ready');
 
-    // Get user info from platform (no OAuth required)
-    console.log('Discord SDK: Getting user info from platform...');
-    const platform = await discordSdk.commands.platform();
-    console.log('Discord SDK: Platform info:', JSON.stringify(platform, null, 2));
+    // Use authorize + authenticate flow to get user data
+    console.log('Discord SDK: Authorizing...');
+    const authResponse = await discordSdk.commands.authorize({
+      client_id: clientId,
+      response_type: 'code',
+      state: '',
+      prompt: 'none',
+      scope: ['identify'],
+    });
 
-    // Check if platform.user exists and has id
-    if (!platform.user || !platform.user.id) {
-      console.error('Discord SDK: Platform user or user.id is missing');
-      throw new Error('Platform user data not available');
+    console.log('Discord SDK: Authorization code received');
+    const code = authResponse.code;
+
+    // Exchange code for access token on backend
+    console.log('Discord SDK: Exchanging code for token...');
+    const tokenResponse = await fetch('/api/auth/discord/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('Discord SDK: Token exchange failed:', errorText);
+      throw new Error('Failed to exchange code for token');
     }
 
-    const userId = platform.user.id;
-    const username = platform.user.username;
-    const discriminator = platform.user.discriminator;
-    const globalName = platform.user.global_name || username;
-    const avatar = platform.user.avatar || null;
+    const { access_token } = await tokenResponse.json();
+    console.log('Discord SDK: Access token received');
 
-    console.log('Discord SDK: User ID:', userId);
-    console.log('Discord SDK: Username:', username);
+    // Authenticate with access token to get user data
+    console.log('Discord SDK: Authenticating...');
+    const auth = await discordSdk.commands.authenticate({ access_token });
 
+    console.log('Discord SDK: User authenticated:', auth.user.id);
     return {
-      access_token: userId, // Use user_id as token for identification
+      access_token,
       user: {
-        id: userId,
-        username: username,
-        globalName: globalName,
-        avatar: avatar,
-        discriminator: discriminator,
+        id: auth.user.id,
+        username: auth.user.username,
+        globalName: auth.user.global_name || auth.user.username,
+        avatar: auth.user.avatar || null,
+        discriminator: auth.user.discriminator,
       },
     };
   } catch (error) {
