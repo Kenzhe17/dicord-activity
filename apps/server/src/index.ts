@@ -23,7 +23,7 @@ app.use(express.json());
 
 // Serve static files from frontend build in production
 if (process.env.NODE_ENV === 'production') {
-  const frontendDistPath = path.join(__dirname, '../web/dist');
+  const frontendDistPath = path.join(__dirname, '../../web/dist');
   console.log('Serving static files from:', frontendDistPath);
   console.log('Directory exists:', require('fs').existsSync(frontendDistPath));
 
