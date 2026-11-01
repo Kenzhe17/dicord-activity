@@ -4,16 +4,12 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { config } from './config';
 import { setupSocketIO } from './sockets/socketHandler';
 import { authenticateSocket } from './middleware/auth';
 import { RoomManager } from './rooms/RoomManager';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
