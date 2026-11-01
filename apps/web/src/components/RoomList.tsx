@@ -10,17 +10,11 @@ interface RoomListProps {
 export function RoomList({ onJoin }: RoomListProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
-  const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
     async function fetchRooms() {
       try {
-        // @ts-ignore
-        const serverUrl = window.__DISCORD_CONFIG?.serverUrl || '';
-        // @ts-ignore
-        const config = window.__DISCORD_CONFIG || {};
-        setDebugInfo(`Config: ${JSON.stringify(config)}, URL: ${serverUrl}`);
-        
+        const serverUrl = __SERVER_URL__;
         const response = await fetch(`${serverUrl}/api/rooms/public`);
         const data = await response.json();
         setRooms(data.rooms || []);
@@ -37,21 +31,11 @@ export function RoomList({ onJoin }: RoomListProps) {
   }, []);
 
   if (loading) {
-    return (
-      <div>
-        <p className="text-secondary-text">Загрузка комнат...</p>
-        <p className="text-xs text-red-500 mt-2">{debugInfo}</p>
-      </div>
-    );
+    return <p className="text-secondary-text">Загрузка комнат...</p>;
   }
 
   if (rooms.length === 0) {
-    return (
-      <div>
-        <p className="text-secondary-text">Нет доступных комнат</p>
-        <p className="text-xs text-red-500 mt-2">{debugInfo}</p>
-      </div>
-    );
+    return <p className="text-secondary-text">Нет доступных комнат</p>;
   }
 
   return (

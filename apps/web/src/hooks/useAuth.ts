@@ -18,10 +18,16 @@ export function useAuth() {
         setLoading(true);
         console.log('Initializing Discord SDK...');
         
+        // Use build-time constants
+        const clientId = __DISCORD_CLIENT_ID__;
+        const serverUrl = __SERVER_URL__;
+        
+        console.log('Client ID:', clientId);
+        console.log('Server URL:', serverUrl);
+        
+        // Set runtime config for other modules
         // @ts-ignore
-        const config = window.__DISCORD_CONFIG || {};
-        console.log('Client ID:', config.clientId || import.meta.env.VITE_DISCORD_CLIENT_ID);
-        console.log('Server URL:', config.serverUrl || import.meta.env.VITE_SERVER_URL);
+        window.__DISCORD_CONFIG = { clientId, serverUrl };
         
         const discordAuth = await initializeDiscordSDK();
         console.log('Discord auth successful:', discordAuth);

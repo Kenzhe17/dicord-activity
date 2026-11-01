@@ -17,8 +17,8 @@ export function initializeSocket(token: string): Socket {
     socket.disconnect();
   }
 
-  // @ts-ignore
-  const serverUrl = window.__DISCORD_CONFIG?.serverUrl || import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+  // Use build-time constant
+  const serverUrl = __SERVER_URL__;
   
   console.log('Connecting to Socket.IO at:', serverUrl);
 
