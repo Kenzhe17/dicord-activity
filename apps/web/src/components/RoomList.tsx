@@ -56,11 +56,11 @@ export function RoomList({ onJoin }: RoomListProps) {
           </div>
           <div className="space-y-2 text-sm mb-3">
             <div className="text-secondary-text">
-              Владелец: {room.owner.discordUser.username}
+              Владелец: {room.owner?.discordUser?.username || 'Неизвестно'}
             </div>
             <div className="flex items-center gap-2 text-secondary-text">
               <Users className="w-4 h-4" />
-              <span>{room.players.length}/{room.maxPlayers}</span>
+              <span>{Array.isArray(room.players) ? room.players.length : 0}/{room.maxPlayers || 6}</span>
             </div>
           </div>
           <button
