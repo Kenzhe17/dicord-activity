@@ -7,7 +7,7 @@ export interface DiscordAuth {
   user: {
     id: string;
     username: string;
-    global_name: string | null;
+    globalName: string | null;
     avatar: string | null;
     discriminator: string;
   };
@@ -47,7 +47,7 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
       user: {
         id: auth.user!.id,
         username: auth.user!.username,
-        global_name: auth.user!.global_name,
+        globalName: auth.user!.globalName,
         avatar: auth.user!.avatar,
         discriminator: auth.user!.discriminator,
       },

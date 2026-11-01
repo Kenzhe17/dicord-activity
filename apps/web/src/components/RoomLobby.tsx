@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Room } from '@rize3-arcade/shared/dist/index.js';
-import { X, Check, Users, Gamepad2, Copy, LogOut } from 'lucide-react';
+import { Check, Users, Gamepad2, Copy, LogOut } from 'lucide-react';
 
 interface RoomLobbyProps {
   room: Room;
@@ -76,7 +76,7 @@ export function RoomLobby({ room, currentUserId, onLeave, onReady, onStartGame }
                   }}
                 />
                 <div>
-                  <p className="font-semibold">{player.discordUser.global_name || player.discordUser.username}</p>
+                  <p className="font-semibold">{player.discordUser.globalName || player.discordUser.username}</p>
                   {player.isOwner && (
                     <p className="text-gold text-sm">Владелец</p>
                   )}

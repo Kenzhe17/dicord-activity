@@ -119,7 +119,7 @@ function App() {
               alt={auth.user.username}
               className="w-10 h-10 rounded-full border-2 border-gold"
             />
-            <span className="font-semibold">{auth.user.global_name || auth.user.username}</span>
+            <span className="font-semibold">{auth.user.globalName || auth.user.username}</span>
           </div>
         </div>
       </header>
