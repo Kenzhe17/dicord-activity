@@ -162,6 +162,8 @@ if (process.env.NODE_ENV === 'production') {
 
   // Inject config into index.html
   app.get('/', (req, res) => {
+    console.log(`[ROOT ROUTE] Request received: ${req.url}, Host: ${req.get('host')}`);
+    
     const indexPath = path.join(frontendDistPath, 'index.html');
     if (fs.existsSync(indexPath)) {
       let html = fs.readFileSync(indexPath, 'utf-8');
@@ -191,6 +193,7 @@ if (process.env.NODE_ENV === 'production') {
       
       res.send(html);
     } else {
+      console.log(`[ROOT ROUTE] index.html not found at ${indexPath}`);
       res.status(404).send('index.html not found');
     }
   });
