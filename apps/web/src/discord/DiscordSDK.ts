@@ -30,7 +30,7 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
     const { code } = await discordSdk.commands.authorize({
       client_id: getClientId(),
       response_type: 'code',
-      scope: ['identify', 'activities.read'],
+      scope: ['activities.read'],
     });
     console.log('Discord SDK: Authorization code received');
 
