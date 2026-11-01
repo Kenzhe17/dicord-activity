@@ -58,7 +58,10 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
     console.log('Discord SDK: Authenticating...');
     const auth = await discordSdk.commands.authenticate({ access_token });
 
-    console.log('Discord SDK: User authenticated:', auth.user.id);
+    console.log('Discord SDK: User authenticated');
+    console.log('Discord SDK: User ID:', auth.user.id);
+    console.log('Discord SDK: User data:', JSON.stringify(auth.user, null, 2));
+
     return {
       access_token,
       user: {

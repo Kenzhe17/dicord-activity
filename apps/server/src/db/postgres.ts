@@ -12,8 +12,18 @@ export interface User {
 
 export async function getUser(userId: string): Promise<User | null> {
   try {
+    console.log('[DB] getUser called with userId:', userId);
+    console.log('[DB] userId type:', typeof userId);
+
     // Convert Discord user_id (string) to number for bigint column
     const userIdNum = parseInt(userId, 10);
+    console.log('[DB] Parsed userIdNum:', userIdNum, 'isNaN:', isNaN(userIdNum));
+
+    if (isNaN(userIdNum)) {
+      console.error('[DB] userId is not a valid number:', userId);
+      return null;
+    }
+
     const result = await pool.query(
       'SELECT user_id, balance FROM user_balance WHERE user_id = $1',
       [userIdNum]

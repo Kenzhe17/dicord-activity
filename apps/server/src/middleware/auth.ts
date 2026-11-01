@@ -21,6 +21,10 @@ export async function authenticateSocket(
     // Token is now the user_id from Discord SDK (or mock_id)
     const userId = token;
 
+    console.log('[Auth] authenticateSocket called with token:', token);
+    console.log('[Auth] username:', username);
+    console.log('[Auth] globalName:', globalName);
+
     // Get or create user in PostgreSQL
     const dbUser = await getOrCreateUser(userId);
 
