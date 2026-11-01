@@ -143,10 +143,12 @@ app.get('/api/stats', (req, res) => {
 
 // Debug endpoint to check config
 app.get('/api/debug/config', (req, res) => {
+  // Force HTTPS for Railway (behind proxy)
+  const protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : (process.env.NODE_ENV === 'production' ? 'https' : req.protocol);
   res.json({
     clientId: process.env.DISCORD_CLIENT_ID,
     corsOrigin: process.env.CORS_ORIGIN,
-    serverUrl: `${req.protocol}://${req.get('host')}`,
+    serverUrl: `${protocol}://${req.get('host')}`,
   });
 });
 
@@ -164,8 +166,9 @@ if (process.env.NODE_ENV === 'production') {
     if (fs.existsSync(indexPath)) {
       let html = fs.readFileSync(indexPath, 'utf-8');
       
-      // Build server URL from request
-      const serverUrl = `${req.protocol}://${req.get('host')}`;
+      // Build server URL from request (force HTTPS in production)
+      const protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : (process.env.NODE_ENV === 'production' ? 'https' : req.protocol);
+      const serverUrl = `${protocol}://${req.get('host')}`;
       
       // Inject Discord config into HTML
       const configScript = `
@@ -192,8 +195,9 @@ if (process.env.NODE_ENV === 'production') {
     if (fs.existsSync(indexPath)) {
       let html = fs.readFileSync(indexPath, 'utf-8');
       
-      // Build server URL from request
-      const serverUrl = `${req.protocol}://${req.get('host')}`;
+      // Build server URL from request (force HTTPS in production)
+      const protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : (process.env.NODE_ENV === 'production' ? 'https' : req.protocol);
+      const serverUrl = `${protocol}://${req.get('host')}`;
       
       const configScript = `
         <script>
