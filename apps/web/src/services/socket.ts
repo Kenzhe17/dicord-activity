@@ -17,7 +17,12 @@ export function initializeSocket(token: string): Socket {
     socket.disconnect();
   }
 
-  socket = io(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001', {
+  // @ts-ignore
+  const serverUrl = window.__DISCORD_CONFIG?.serverUrl || import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+  
+  console.log('Connecting to Socket.IO at:', serverUrl);
+
+  socket = io(serverUrl, {
     auth: { token },
     transports: ['websocket'],
   });

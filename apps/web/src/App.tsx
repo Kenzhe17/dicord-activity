@@ -59,7 +59,9 @@ function App() {
 
   async function fetchStats() {
     try {
-      const response = await fetch('/api/stats');
+      // @ts-ignore
+      const serverUrl = window.__DISCORD_CONFIG?.serverUrl || '';
+      const response = await fetch(`${serverUrl}/api/stats`);
       const data = await response.json();
       setStats(data);
     } catch (error) {

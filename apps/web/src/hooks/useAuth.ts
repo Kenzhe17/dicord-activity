@@ -17,8 +17,11 @@ export function useAuth() {
       try {
         setLoading(true);
         console.log('Initializing Discord SDK...');
-        console.log('Client ID:', import.meta.env.VITE_DISCORD_CLIENT_ID);
-        console.log('Server URL:', import.meta.env.VITE_SERVER_URL);
+        
+        // @ts-ignore
+        const config = window.__DISCORD_CONFIG || {};
+        console.log('Client ID:', config.clientId || import.meta.env.VITE_DISCORD_CLIENT_ID);
+        console.log('Server URL:', config.serverUrl || import.meta.env.VITE_SERVER_URL);
         
         const discordAuth = await initializeDiscordSDK();
         console.log('Discord auth successful:', discordAuth);
