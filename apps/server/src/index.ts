@@ -169,6 +169,13 @@ app.get('/api/user/balance', async (req, res) => {
       return res.status(400).json({ error: 'user_id is required' });
     }
 
+    // Check if guild_id matches the allowed guild
+    const allowedGuildId = '1196165488565289012';
+    if (guildId && guildId !== allowedGuildId) {
+      console.error('[Balance] Invalid guild_id:', guildId, 'Expected:', allowedGuildId);
+      return res.status(403).json({ error: 'Unauthorized guild' });
+    }
+
     const user = await getOrCreateUser(userId, guildId);
     res.json({ user_id: user.user_id, balance: user.balance });
   } catch (error) {

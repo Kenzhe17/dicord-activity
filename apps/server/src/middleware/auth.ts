@@ -27,6 +27,13 @@ export async function authenticateSocket(
     console.log('[Auth] globalName:', globalName);
     console.log('[Auth] guildId:', guildId);
 
+    // Check if guild_id matches the allowed guild
+    const allowedGuildId = '1196165488565289012';
+    if (guildId && guildId !== allowedGuildId) {
+      console.error('[Auth] Invalid guild_id:', guildId, 'Expected:', allowedGuildId);
+      return null;
+    }
+
     // Get or create user in PostgreSQL
     const dbUser = await getOrCreateUser(userId, guildId);
 

@@ -17,6 +17,21 @@ function App() {
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [stats, setStats] = useState({ activeRooms: 0, totalPlayers: 0 });
   const [balance, setBalance] = useState<number>(0);
+  const [guildError, setGuildError] = useState<string | null>(null);
+
+  // Check if guild is allowed
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const guildId = urlParams.get('guild_id');
+    const allowedGuildId = '1196165488565289012';
+    
+    console.log('[App] Checking guild_id:', guildId, 'Allowed:', allowedGuildId);
+    
+    if (guildId && guildId !== allowedGuildId) {
+      console.error('[App] Unauthorized guild:', guildId);
+      setGuildError('Этот Activity доступен только на определённом сервере');
+    }
+  }, []);
 
   // Catch global errors for debugging
   useEffect(() => {
@@ -89,6 +104,14 @@ function App() {
       const urlParams = new URLSearchParams(window.location.search);
       const guildId = urlParams.get('guild_id');
       const response = await fetch(`${serverUrl}/api/user/balance?user_id=${auth.user.id}&guild_id=${guildId}`);
+      
+      if (response.status === 403) {
+        console.error('Unauthorized guild');
+        setBalance(0);
+        setGuildError('Этот Activity доступен только на определённом сервере');
+        return;
+      }
+      
       const data = await response.json();
       setBalance(data.balance);
     } catch (error) {
@@ -109,6 +132,16 @@ function App() {
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-gold mx-auto mb-4" />
           <p className="text-secondary-text">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (guildError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center max-w-md">
+          <p className="text-error mb-4">{guildError}</p>
         </div>
       </div>
     );
