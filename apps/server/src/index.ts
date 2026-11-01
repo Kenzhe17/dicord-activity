@@ -81,6 +81,9 @@ app.post('/api/auth/discord/token', async (req, res) => {
     console.log('[OAuth] Client Secret present:', !!config.discord.clientSecret);
     console.log('[OAuth] Redirect URI:', config.discord.redirectUri);
 
+    // For Discord Embedded Apps, use the configured redirect_uri or fallback to server URL
+    const redirectUri = config.discord.redirectUri || `https://rize3-arcadeserver-production.up.railway.app/`;
+
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: {
@@ -91,7 +94,7 @@ app.post('/api/auth/discord/token', async (req, res) => {
         client_secret: config.discord.clientSecret,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: config.discord.redirectUri,
+        redirect_uri: redirectUri,
       }),
     });
 
