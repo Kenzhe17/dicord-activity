@@ -24,18 +24,11 @@ app.use(express.json());
 // Serve static files from frontend build in production
 if (process.env.NODE_ENV === 'production') {
   const frontendDistPath = path.join(__dirname, '../../web/dist');
-  console.log('Serving static files from:', frontendDistPath);
-  console.log('Directory exists:', require('fs').existsSync(frontendDistPath));
-
   app.use(express.static(frontendDistPath, { fallthrough: true }));
 
   // Serve index.html for all routes (SPA routing)
   app.get('*', (req, res) => {
-    console.log('Serving index.html for:', req.path);
-    const indexPath = path.join(frontendDistPath, 'index.html');
-    console.log('Index path:', indexPath);
-    console.log('Index exists:', require('fs').existsSync(indexPath));
-    res.sendFile(indexPath);
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
 }
 
