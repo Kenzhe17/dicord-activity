@@ -13,7 +13,7 @@ export interface User {
 export async function getUser(userId: string): Promise<User | null> {
   try {
     const result = await pool.query(
-      'SELECT user_id, balance FROM users WHERE user_id = $1',
+      'SELECT user_id, balance FROM user_balance WHERE user_id = $1',
       [userId]
     );
     return result.rows[0] || null;
@@ -26,7 +26,7 @@ export async function getUser(userId: string): Promise<User | null> {
 export async function createUser(userId: string, initialBalance: number = 0): Promise<User> {
   try {
     const result = await pool.query(
-      'INSERT INTO users (user_id, balance) VALUES ($1, $2) RETURNING user_id, balance',
+      'INSERT INTO user_balance (user_id, balance) VALUES ($1, $2) RETURNING user_id, balance',
       [userId, initialBalance]
     );
     return result.rows[0];
@@ -39,6 +39,7 @@ export async function createUser(userId: string, initialBalance: number = 0): Pr
 export async function getOrCreateUser(userId: string): Promise<User> {
   let user = await getUser(userId);
   if (!user) {
+    console.log(`[DB] Creating new user in user_balance table: ${userId}`);
     user = await createUser(userId, 0);
   }
   return user;
@@ -47,7 +48,7 @@ export async function getOrCreateUser(userId: string): Promise<User> {
 export async function updateBalance(userId: string, amount: number): Promise<User> {
   try {
     const result = await pool.query(
-      'UPDATE users SET balance = balance + $1 WHERE user_id = $2 RETURNING user_id, balance',
+      'UPDATE user_balance SET balance = balance + $1 WHERE user_id = $2 RETURNING user_id, balance',
       [amount, userId]
     );
     return result.rows[0];
