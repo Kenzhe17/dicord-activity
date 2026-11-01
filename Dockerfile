@@ -17,14 +17,14 @@ COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 COPY apps/server ./apps/server
 
-# Build shared package
-RUN npm run build --workspace=packages/shared
+# Build shared package FIRST
+RUN cd packages/shared && npm run build
 
 # Build frontend
-RUN npm run build --workspace=apps/web
+RUN cd apps/web && npm run build
 
 # Build backend
-RUN npm run build --workspace=apps/server
+RUN cd apps/server && npm run build
 
 # Production stage
 FROM node:18-alpine AS runner

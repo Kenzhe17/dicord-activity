@@ -6,9 +6,9 @@ cmds = ["npm install"]
 
 [phases.build]
 cmds = [
-  "npm run build --workspace=packages/shared",
-  "npm run build --workspace=apps/web",
-  "npm run build --workspace=apps/server"
+  "cd packages/shared && npm run build",
+  "cd apps/web && npm run build",
+  "cd apps/server && npm run build"
 ]
 
 [start]
