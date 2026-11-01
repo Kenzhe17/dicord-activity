@@ -24,9 +24,9 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
     await discordSdk.ready();
     console.log('Discord SDK: Ready');
     
-    const auth = await discordSdk.commands.authenticate({
-      access_token: null as any,
-    });
+    // In Discord Embedded Apps, authenticate() should be called without parameters
+    // to let Discord handle the OAuth flow automatically
+    const auth = await discordSdk.commands.authenticate();
     
     console.log('Discord SDK: Authenticated', auth);
     
