@@ -19,17 +19,17 @@ export interface DiscordUserResponse {
 
 export class DiscordAuthService {
   static async exchangeCodeForToken(code: string): Promise<DiscordAccessTokenResponse> {
-    // For Embedded Apps, Discord uses automatic redirect URI
-    // We don't need to specify redirect_uri parameter
+    // For Embedded Apps, try without redirect_uri (Discord uses its own)
+    const params = new URLSearchParams({
+      client_id: config.discord.clientId,
+      client_secret: config.discord.clientSecret,
+      grant_type: 'authorization_code',
+      code,
+    });
+
     const response = await axios.post(
       'https://discord.com/api/oauth2/token',
-      new URLSearchParams({
-        client_id: config.discord.clientId,
-        client_secret: config.discord.clientSecret,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: 'https://discord.com', // Discord accepts this for Embedded Apps
-      }),
+      params,
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
