@@ -14,8 +14,34 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 
+// CORS configuration to allow Discord Activity domains
 app.use(cors({
-  origin: config.corsOrigin,
+  origin: (origin, callback) => {
+    // Allow all origins for development/testing
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    
+    // Allow specific origins
+    const allowedOrigins = [
+      config.corsOrigin,
+      'https://*.discordsays.com',
+      'https://*.discord.com',
+      'https://*.discord.gg',
+    ];
+    
+    // If origin is allowed
+    if (!origin || allowedOrigins.includes('*') || origin === config.corsOrigin) {
+      return callback(null, true);
+    }
+    
+    // Allow discordsays.com (Discord Activity embedded domain)
+    if (origin.includes('discordsays.com')) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 
