@@ -27,6 +27,8 @@ export class DiscordAuthService {
       code,
     });
 
+    console.log('[OAuth] Request params:', params.toString());
+
     const response = await axios.post(
       'https://discord.com/api/oauth2/token',
       params,

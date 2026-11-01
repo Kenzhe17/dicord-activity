@@ -80,29 +80,24 @@ app.post('/api/auth/discord/token', async (req, res) => {
 
     console.log('[OAuth] Client ID:', config.discord.clientId);
     console.log('[OAuth] Client Secret present:', !!config.discord.clientSecret);
-    console.log('[OAuth] Redirect URI:', config.discord.redirectUri);
 
-    // For Discord Embedded Apps, use a valid redirect_uri
-    // The redirect_uri must match what's configured in Discord Developer Portal
-    // For Activities, this is typically the Activity's URL or a special Discord URL
-    // Ensure trailing slash for valid URL format
-    let redirectUri = config.discord.redirectUri || 'https://discord.com/';
-    if (!redirectUri.endsWith('/')) {
-      redirectUri += '/';
-    }
+    // For Discord Embedded Apps, Discord handles redirect automatically
+    // Try without redirect_uri parameter
+    const body = new URLSearchParams({
+      client_id: config.discord.clientId,
+      client_secret: config.discord.clientSecret,
+      grant_type: 'authorization_code',
+      code,
+    });
+
+    console.log('[OAuth] Request body:', body.toString());
 
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        client_id: config.discord.clientId,
-        client_secret: config.discord.clientSecret,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: redirectUri,
-      }),
+      body,
     });
 
     console.log('[OAuth] Discord API response status:', tokenResponse.status);
