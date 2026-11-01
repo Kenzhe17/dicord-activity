@@ -18,6 +18,15 @@ function App() {
   const [stats, setStats] = useState({ activeRooms: 0, totalPlayers: 0 });
   const [balance, setBalance] = useState<number>(0);
 
+  // Catch global errors for debugging
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('Global error:', event.error);
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
   useEffect(() => {
     if (auth) {
       // Use user.id as the token (Discord user_id), not access_token
@@ -84,6 +93,7 @@ function App() {
       setBalance(data.balance);
     } catch (error) {
       console.error('Failed to fetch balance:', error);
+      setBalance(0); // Fallback to 0 balance
     }
   }
 
