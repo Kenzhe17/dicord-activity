@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       '__DISCORD_CLIENT_ID__': JSON.stringify(env.VITE_DISCORD_CLIENT_ID || '1566418593191690330'),
-      '__SERVER_URL__': JSON.stringify(env.VITE_SERVER_URL || 'https://rize3-arcadeserver-production.up.railway.app'),
+      '__SERVER_URL__': JSON.stringify(env.VITE_SERVER_URL || (mode === 'production' ? '' : 'http://localhost:3001')),
     },
     server: {
       port: 5173,
