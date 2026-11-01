@@ -50,7 +50,7 @@ app.use(express.json());
 
 // Logging middleware
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
 
@@ -138,6 +138,15 @@ app.get('/api/stats', (req, res) => {
   res.json({
     activeRooms: RoomManager.getActiveRoomCount(),
     totalPlayers: RoomManager.getTotalPlayerCount(),
+  });
+});
+
+// Debug endpoint to check config
+app.get('/api/debug/config', (req, res) => {
+  res.json({
+    clientId: process.env.DISCORD_CLIENT_ID,
+    corsOrigin: process.env.CORS_ORIGIN,
+    serverUrl: `${req.protocol}://${req.get('host')}`,
   });
 });
 
