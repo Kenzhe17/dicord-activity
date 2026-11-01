@@ -9,6 +9,7 @@ import { config } from './config';
 import { setupSocketIO } from './sockets/socketHandler';
 import { authenticateSocket } from './middleware/auth';
 import { RoomManager } from './rooms/RoomManager';
+import { getOrCreateUser, updateBalance, checkPoolConnection } from './db/postgres';
 
 dotenv.config();
 
@@ -160,6 +161,44 @@ app.get('/api/stats', (req, res) => {
     activeRooms: RoomManager.getActiveRoomCount(),
     totalPlayers: RoomManager.getTotalPlayerCount(),
   });
+});
+
+// User balance endpoint
+app.get('/api/user/balance', async (req, res) => {
+  try {
+    const userId = req.query.user_id as string;
+    if (!userId) {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
+
+    const user = await getOrCreateUser(userId);
+    res.json({ user_id: user.user_id, balance: user.balance });
+  } catch (error) {
+    console.error('Balance endpoint error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update balance endpoint
+app.post('/api/user/balance', async (req, res) => {
+  try {
+    const { user_id, amount } = req.body;
+    if (!user_id || amount === undefined) {
+      return res.status(400).json({ error: 'user_id and amount are required' });
+    }
+
+    const user = await updateBalance(user_id, amount);
+    res.json({ user_id: user.user_id, balance: user.balance });
+  } catch (error) {
+    console.error('Update balance error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Database health check
+app.get('/api/db/health', async (req, res) => {
+  const isHealthy = await checkPoolConnection();
+  res.json({ healthy: isHealthy });
 });
 
 // Debug endpoint to check config

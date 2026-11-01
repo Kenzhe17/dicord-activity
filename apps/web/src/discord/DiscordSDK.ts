@@ -24,50 +24,28 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
     await discordSdk.ready();
     console.log('Discord SDK: Ready');
 
-    // Step 1: Authorize with Discord to get OAuth code
-    console.log('Discord SDK: Authorizing...');
-    const { code } = await discordSdk.commands.authorize({
-      client_id: clientId,
-      response_type: 'code',
-      state: '',
-      prompt: 'none',
-      scope: ['identify'],
-    });
-    console.log('Discord SDK: Authorization code received');
+    // Get user info from platform (no OAuth required)
+    console.log('Discord SDK: Getting user info from platform...');
+    const platform = await discordSdk.commands.platform();
+    console.log('Discord SDK: Platform info:', platform);
 
-    // Step 2: Exchange code for access token via backend
-    console.log('Discord SDK: Exchanging code for token...');
-    const response = await fetch('/api/auth/discord/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ code }),
-    });
+    const userId = platform.user.id;
+    const username = platform.user.username;
+    const discriminator = platform.user.discriminator;
+    const globalName = platform.user.global_name || username;
+    const avatar = platform.user.avatar || null;
 
-    if (!response.ok) {
-      throw new Error('Failed to exchange code for token');
-    }
-
-    const { access_token } = await response.json();
-    console.log('Discord SDK: Access token received');
-
-    // Step 3: Authenticate with Discord client using the access token
-    console.log('Discord SDK: Authenticating...');
-    const auth = await discordSdk.commands.authenticate({
-      access_token,
-    });
-
-    console.log('Discord SDK: Authenticated', auth);
+    console.log('Discord SDK: User ID:', userId);
+    console.log('Discord SDK: Username:', username);
 
     return {
-      access_token: auth.access_token,
+      access_token: userId, // Use user_id as token for identification
       user: {
-        id: auth.user.id,
-        username: auth.user.username,
-        globalName: auth.user.global_name || null,
-        avatar: auth.user.avatar || null,
-        discriminator: auth.user.discriminator,
+        id: userId,
+        username: username,
+        globalName: globalName,
+        avatar: avatar,
+        discriminator: discriminator,
       },
     };
   } catch (error) {
@@ -77,7 +55,7 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
     // Fallback to mock user for testing/development
     const randomId = Math.floor(Math.random() * 1000000).toString();
     return {
-      access_token: 'mock_token',
+      access_token: `mock_${randomId}`,
       user: {
         id: `mock_${randomId}`,
         username: `Player${randomId}`,
