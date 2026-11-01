@@ -15,7 +15,8 @@ export interface AuthenticatedRequest extends Request {
 export async function authenticateSocket(
   token: string,
   username?: string,
-  globalName?: string
+  globalName?: string,
+  guildId?: string
 ): Promise<{ id: string; username: string; globalName: string | null; avatar: string | null; discriminator: string; balance: number } | null> {
   try {
     // Token is now the user_id from Discord SDK (or mock_id)
@@ -24,9 +25,10 @@ export async function authenticateSocket(
     console.log('[Auth] authenticateSocket called with token:', token);
     console.log('[Auth] username:', username);
     console.log('[Auth] globalName:', globalName);
+    console.log('[Auth] guildId:', guildId);
 
     // Get or create user in PostgreSQL
-    const dbUser = await getOrCreateUser(userId);
+    const dbUser = await getOrCreateUser(userId, guildId);
 
     // Use provided username/globalName from Discord SDK, or generate fallback
     const isMock = userId.startsWith('mock_');

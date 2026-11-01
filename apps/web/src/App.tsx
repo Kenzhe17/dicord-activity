@@ -77,7 +77,9 @@ function App() {
   async function fetchBalance() {
     try {
       const serverUrl = __SERVER_URL__ || '';
-      const response = await fetch(`${serverUrl}/api/user/balance?user_id=${auth.user.id}`);
+      const urlParams = new URLSearchParams(window.location.search);
+      const guildId = urlParams.get('guild_id');
+      const response = await fetch(`${serverUrl}/api/user/balance?user_id=${auth.user.id}&guild_id=${guildId}`);
       const data = await response.json();
       setBalance(data.balance);
     } catch (error) {

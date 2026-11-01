@@ -42,13 +42,15 @@ export async function getUser(userId: string): Promise<User | null> {
   }
 }
 
-export async function createUser(userId: string, initialBalance: number = 0): Promise<User> {
+export async function createUser(userId: string, initialBalance: number = 0, guildId?: string): Promise<User> {
   try {
     // Convert Discord user_id (string) to number for bigint column
     const userIdNum = parseInt(userId, 10);
+    const guildIdNum = guildId ? parseInt(guildId, 10) : null;
+
     const result = await pool.query(
-      'INSERT INTO user_balance (user_id, balance) VALUES ($1, $2) RETURNING user_id, balance',
-      [userIdNum, initialBalance]
+      'INSERT INTO user_balance (user_id, balance, guild_id) VALUES ($1, $2, $3) RETURNING user_id, balance',
+      [userIdNum, initialBalance, guildIdNum]
     );
     // Convert number back to string for consistency
     return {
@@ -61,7 +63,7 @@ export async function createUser(userId: string, initialBalance: number = 0): Pr
   }
 }
 
-export async function getOrCreateUser(userId: string): Promise<User> {
+export async function getOrCreateUser(userId: string, guildId?: string): Promise<User> {
   // For mock users (testing), don't use database
   if (userId.startsWith('mock_')) {
     console.log(`[DB] Using mock user (no DB access): ${userId}`);
@@ -73,8 +75,8 @@ export async function getOrCreateUser(userId: string): Promise<User> {
 
   let user = await getUser(userId);
   if (!user) {
-    console.log(`[DB] Creating new user in user_balance table: ${userId}`);
-    user = await createUser(userId, 0);
+    console.log(`[DB] Creating new user in user_balance table: ${userId}, guildId: ${guildId}`);
+    user = await createUser(userId, 0, guildId);
   }
   return user;
 }

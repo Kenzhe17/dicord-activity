@@ -22,8 +22,12 @@ export function initializeSocket(token: string, username?: string, globalName?: 
 
   console.log('Connecting to Socket.IO at:', serverUrl);
 
+  // Get guild_id from URL query parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  const guildId = urlParams.get('guild_id');
+
   socket = io(serverUrl, {
-    auth: { token, username, globalName },
+    auth: { token, username, globalName, guildId },
     transports: ['websocket'],
   });
 
