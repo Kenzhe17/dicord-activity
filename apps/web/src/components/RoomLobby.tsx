@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Room } from '@rize3-arcade/shared';
+import { Room } from '@rize3-arcade/shared/dist/index.js';
 import { X, Check, Users, Gamepad2, Copy, LogOut } from 'lucide-react';
 
 interface RoomLobbyProps {

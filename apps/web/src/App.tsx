@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from './hooks/useAuth';
 import { initializeSocket, disconnectSocket, getSocket } from './services/socket';
-import { Room, GameType } from '@rize3-arcade/shared';
+import { Room, GameType } from '@rize3-arcade/shared/dist/index.js';
 import { GameCard } from './components/GameCard';
 import { RoomList } from './components/RoomList';
 import { CreateRoomModal } from './components/CreateRoomModal';

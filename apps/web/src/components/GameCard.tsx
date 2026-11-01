@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { GameType } from '@rize3-arcade/shared';
+import { GameType } from '@rize3-arcade/shared/dist/index.js';
 import { Users, Play } from 'lucide-react';
 
 interface GameCardProps {

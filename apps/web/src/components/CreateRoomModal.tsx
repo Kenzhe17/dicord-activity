@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GameType } from '@rize3-arcade/shared';
+import { GameType } from '@rize3-arcade/shared/dist/index.js';
 import { X, Users, Settings } from 'lucide-react';
 
 interface CreateRoomModalProps {

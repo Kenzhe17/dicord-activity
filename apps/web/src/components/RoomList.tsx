@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Room } from '@rize3-arcade/shared';
+import { Room } from '@rize3-arcade/shared/dist/index.js';
 import { motion } from 'framer-motion';
 import { Users, Lock, Gamepad2 } from 'lucide-react';
 

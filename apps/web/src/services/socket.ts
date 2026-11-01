@@ -10,7 +10,7 @@ import {
   StartGameSchema,
   GameActionSchema,
   ReconnectRoomSchema,
-} from '@rize3-arcade/shared';
+} from '@rize3-arcade/shared/dist/index.js';
 
 let socket: Socket<ClientToServerEvents, ServerToClientEvents> | null = null;
 
