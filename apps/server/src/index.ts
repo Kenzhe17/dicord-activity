@@ -84,7 +84,11 @@ app.post('/api/auth/discord/token', async (req, res) => {
     // For Discord Embedded Apps, use a valid redirect_uri
     // The redirect_uri must match what's configured in Discord Developer Portal
     // For Activities, this is typically the Activity's URL or a special Discord URL
-    const redirectUri = config.discord.redirectUri || 'https://discord.com/';
+    // Ensure trailing slash for valid URL format
+    let redirectUri = config.discord.redirectUri || 'https://discord.com/';
+    if (!redirectUri.endsWith('/')) {
+      redirectUri += '/';
+    }
 
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
