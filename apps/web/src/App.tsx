@@ -59,7 +59,7 @@ function App() {
 
   async function fetchStats() {
     try {
-      const serverUrl = __SERVER_URL__;
+      const serverUrl = __SERVER_URL__ || '';
       const response = await fetch(`${serverUrl}/api/stats`);
       const data = await response.json();
       setStats(data);

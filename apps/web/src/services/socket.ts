@@ -17,8 +17,8 @@ export function initializeSocket(token: string): Socket {
     socket.disconnect();
   }
 
-  // Use build-time constant
-  const serverUrl = __SERVER_URL__;
+  // Use relative path since Activity is served from same domain as backend
+  const serverUrl = __SERVER_URL__ || '/';
   
   console.log('Connecting to Socket.IO at:', serverUrl);
 

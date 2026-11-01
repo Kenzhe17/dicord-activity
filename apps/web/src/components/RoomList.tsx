@@ -14,7 +14,7 @@ export function RoomList({ onJoin }: RoomListProps) {
   useEffect(() => {
     async function fetchRooms() {
       try {
-        const serverUrl = __SERVER_URL__;
+        const serverUrl = __SERVER_URL__ || '';
         const response = await fetch(`${serverUrl}/api/rooms/public`);
         const data = await response.json();
         setRooms(data.rooms || []);
