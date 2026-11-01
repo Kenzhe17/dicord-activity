@@ -20,7 +20,7 @@ export async function initializeDiscordSDK(): Promise<DiscordAuth> {
     const { code } = await discordSdk.commands.authorize({
       client_id: import.meta.env.VITE_DISCORD_CLIENT_ID,
       response_type: 'code',
-      scope: ['identify', 'rpc.activities.read'],
+      scope: ['identify', 'activities.read'],
     });
 
     const response = await fetch('/api/auth/discord/token', {
