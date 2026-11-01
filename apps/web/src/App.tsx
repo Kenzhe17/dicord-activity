@@ -16,6 +16,7 @@ function App() {
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [stats, setStats] = useState({ activeRooms: 0, totalPlayers: 0 });
+  const [balance, setBalance] = useState<number>(0);
 
   useEffect(() => {
     if (auth) {
@@ -33,6 +34,10 @@ function App() {
 
       socket.on('player_joined', (data: any) => {
         setCurrentRoom(data.room);
+        // If we just joined by code, show lobby
+        if (currentView === 'join-room') {
+          setCurrentView('lobby');
+        }
       });
 
       socket.on('player_left', (data: any) => {
@@ -68,6 +73,23 @@ function App() {
       console.error('Failed to fetch stats:', error);
     }
   }
+
+  async function fetchBalance() {
+    try {
+      const serverUrl = __SERVER_URL__ || '';
+      const response = await fetch(`${serverUrl}/api/user/balance?user_id=${auth.user.id}`);
+      const data = await response.json();
+      setBalance(data.balance);
+    } catch (error) {
+      console.error('Failed to fetch balance:', error);
+    }
+  }
+
+  useEffect(() => {
+    if (auth) {
+      fetchBalance();
+    }
+  }, [auth]);
 
   if (loading) {
     return (
@@ -126,17 +148,7 @@ function App() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="glass-panel m-4 p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Gamepad2 className="w-8 h-8 text-gold" />
-          <h1 className="text-2xl font-bold gold-gradient bg-clip-text text-transparent">
-            r!z3 Arcade
-          </h1>
-        </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-secondary-text">
-            <Users className="w-5 h-5" />
-            <span>{stats.totalPlayers} онлайн</span>
-          </div>
           <div className="flex items-center gap-3">
             <img
               src={getAvatarUrl(auth.user.id, auth.user.avatar)}
@@ -145,6 +157,13 @@ function App() {
             />
             <span className="font-semibold">{auth.user.globalName || auth.user.username}</span>
           </div>
+          <div className="glass-panel px-4 py-2">
+            <span className="text-gold font-bold">Баланс: {balance}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-secondary-text">
+          <Users className="w-5 h-5" />
+          <span>{stats.totalPlayers} онлайн</span>
         </div>
       </header>
 
@@ -190,22 +209,16 @@ function App() {
                 <GameCard
                   game="uno"
                   title="UNO"
-                  description="Популярная карточная игра с цветами и специальными картами"
+                  description="В разработке"
                   players="2-10"
-                  onClick={() => {
-                    setSelectedGame('uno');
-                    setCurrentView('create-room');
-                  }}
+                  disabled={true}
                 />
                 <GameCard
                   game="mafia"
                   title="Мафия"
-                  description="Социальная игра с ролями, ночными действиями и голосованием"
+                  description="В разработке"
                   players="5-12"
-                  onClick={() => {
-                    setSelectedGame('mafia');
-                    setCurrentView('create-room');
-                  }}
+                  disabled={true}
                 />
               </div>
 

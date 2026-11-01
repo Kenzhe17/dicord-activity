@@ -8,9 +8,10 @@ interface GameCardProps {
   description: string;
   players: string;
   onClick: () => void;
+  disabled?: boolean;
 }
 
-export function GameCard({ game, title, description, players, onClick }: GameCardProps) {
+export function GameCard({ game, title, description, players, onClick, disabled = false }: GameCardProps) {
   const gameIcons: Record<GameType, string> = {
     durak: '🃏',
     uno: '🎴',
@@ -19,10 +20,10 @@ export function GameCard({ game, title, description, players, onClick }: GameCar
 
   return (
     <motion.div
-      whileHover={{ scale: 1.05, y: -5 }}
-      whileTap={{ scale: 0.95 }}
-      className="glass-panel p-6 cursor-pointer hover:border-gold/50 transition-all"
-      onClick={onClick}
+      whileHover={disabled ? {} : { scale: 1.05, y: -5 }}
+      whileTap={disabled ? {} : { scale: 0.95 }}
+      className={`glass-panel p-6 transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-gold/50'}`}
+      onClick={disabled ? undefined : onClick}
     >
       <div className="text-6xl mb-4">{gameIcons[game]}</div>
       <h3 className="text-xl font-bold mb-2">{title}</h3>
@@ -32,7 +33,7 @@ export function GameCard({ game, title, description, players, onClick }: GameCar
           <Users className="w-4 h-4" />
           <span className="text-sm">{players}</span>
         </div>
-        <Play className="w-5 h-5 text-gold" />
+        {!disabled && <Play className="w-5 h-5 text-gold" />}
       </div>
     </motion.div>
   );

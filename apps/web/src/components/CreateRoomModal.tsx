@@ -10,7 +10,7 @@ interface CreateRoomModalProps {
 }
 
 export function CreateRoomModal({ selectedGame, onClose, onCreate }: CreateRoomModalProps) {
-  const [gameType, setGameType] = useState<GameType>(selectedGame || 'durak');
+  const [gameType] = useState<GameType>('durak'); // Only Durak is available
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [isPublic, setIsPublic] = useState(true);
 
@@ -20,7 +20,7 @@ export function CreateRoomModal({ selectedGame, onClose, onCreate }: CreateRoomM
     mafia: { min: 5, max: 12, default: 8 },
   };
 
-  const config = gameConfig[gameType];
+  const config = gameConfig['durak'];
 
   return (
     <AnimatePresence>
@@ -46,23 +46,11 @@ export function CreateRoomModal({ selectedGame, onClose, onCreate }: CreateRoomM
           </div>
 
           <div className="space-y-6">
-            {/* Game Type Selection */}
+            {/* Game Type Display (Read-only) */}
             <div>
               <label className="block text-sm font-semibold mb-2">Игра</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['durak', 'uno', 'mafia'] as GameType[]).map((game) => (
-                  <button
-                    key={game}
-                    onClick={() => setGameType(game)}
-                    className={`p-3 rounded-lg border transition-all ${
-                      gameType === game
-                        ? 'border-gold bg-gold/10'
-                        : 'border-white/10 hover:border-white/30'
-                    }`}
-                  >
-                    <span className="capitalize">{game}</span>
-                  </button>
-                ))}
+              <div className="p-3 rounded-lg border border-gold bg-gold/10">
+                <span className="font-semibold">Дурак</span>
               </div>
             </div>
 
