@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-primary-text antialiased;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-surface/80 backdrop-blur-sm border border-white/10 rounded-lg;
+  }
+
+  .gold-gradient {
+    @apply bg-gradient-to-r from-gold to-yellow-600;
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 rounded-lg font-semibold transition-all duration-200 hover:scale-105 active:scale-95;
+  }
+
+  .btn-gold {
+    @apply btn-primary gold-gradient text-white shadow-lg shadow-gold/20;
+  }
+
+  .btn-secondary {
+    @apply btn-primary bg-surface-secondary text-primary-text border border-white/10 hover:bg-white/5;
+  }
+}

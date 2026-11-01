@@ -1,0 +1,22 @@
+[phases.setup]
+nixPkgs = ["nodejs-18_x"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = [
+  "npm run build --workspace=packages/shared",
+  "npm run build --workspace=apps/web",
+  "npm run build --workspace=apps/server"
+]
+
+[start]
+cmd = "node apps/server/dist/index.js"
+
+[variables]
+NODE_ENV = "production"
+PORT = "3001"
+
+[healthcheck]
+httpPath = "/api/health"
