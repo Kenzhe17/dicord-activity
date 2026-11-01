@@ -16,9 +16,12 @@ export function useAuth() {
     async function authenticate() {
       try {
         setLoading(true);
+        console.log('Initializing Discord SDK...');
         const discordAuth = await initializeDiscordSDK();
+        console.log('Discord auth successful:', discordAuth);
         setAuth(discordAuth);
       } catch (err) {
+        console.error('Discord auth error:', err);
         setError(err instanceof Error ? err.message : 'Authentication failed');
       } finally {
         setLoading(false);
