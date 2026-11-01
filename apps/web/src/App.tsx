@@ -19,7 +19,7 @@ function App() {
 
   useEffect(() => {
     if (auth) {
-      const socket = initializeSocket(auth.access_token);
+      const socket = initializeSocket(auth.access_token, auth.user.username, auth.user.globalName || undefined);
 
       socket.on('room_created', (data: any) => {
         setCurrentRoom(data.room);

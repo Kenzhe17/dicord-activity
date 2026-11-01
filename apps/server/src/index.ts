@@ -297,18 +297,20 @@ const io = new Server(httpServer, {
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
+    const username = socket.handshake.auth.username;
+    const globalName = socket.handshake.auth.globalName;
 
     if (!token) {
       return next(new Error('Authentication token missing'));
     }
 
-    const user = await authenticateSocket(token);
+    const user = await authenticateSocket(token, username, globalName);
     if (!user) {
       return next(new Error('Invalid authentication token'));
     }
 
     socket.data.user = user;
-    console.log(`[SOCKET] User authenticated: ${user.id} (balance: ${user.balance})`);
+    console.log(`[SOCKET] User authenticated: ${user.id} (${user.username}, balance: ${user.balance})`);
     next();
   } catch (error) {
     console.error('[SOCKET] Authentication error:', error);

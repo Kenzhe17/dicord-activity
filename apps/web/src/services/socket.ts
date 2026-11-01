@@ -12,18 +12,18 @@ import {
 
 let socket: Socket | null = null;
 
-export function initializeSocket(token: string): Socket {
+export function initializeSocket(token: string, username?: string, globalName?: string): Socket {
   if (socket) {
     socket.disconnect();
   }
 
   // Use relative path since Activity is served from same domain as backend
-  const serverUrl = __SERVER_URL__ || '/';
-  
+  const serverUrl = __SERVER_URL__ || '';
+
   console.log('Connecting to Socket.IO at:', serverUrl);
 
   socket = io(serverUrl, {
-    auth: { token },
+    auth: { token, username, globalName },
     transports: ['websocket'],
   });
 
