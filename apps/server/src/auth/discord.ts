@@ -12,7 +12,7 @@ export interface DiscordAccessTokenResponse {
 export interface DiscordUserResponse {
   id: string;
   username: string;
-  global_name: string | null;
+  globalName: string | null;
   avatar: string | null;
   discriminator: string;
 }
