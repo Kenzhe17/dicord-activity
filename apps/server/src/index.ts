@@ -164,19 +164,13 @@ app.get('/api/stats', (req, res) => {
 app.get('/api/user/balance', async (req, res) => {
   try {
     const userId = req.query.user_id as string;
-    const guildId = req.query.guild_id as string;
     if (!userId) {
       return res.status(400).json({ error: 'user_id is required' });
     }
 
-    // Check if guild_id matches the allowed guild
-    const allowedGuildId = '1196165488565289012';
-    if (guildId && guildId !== allowedGuildId) {
-      console.error('[Balance] Invalid guild_id:', guildId, 'Expected:', allowedGuildId);
-      return res.status(403).json({ error: 'Unauthorized guild' });
-    }
-
-    const user = await getOrCreateUser(userId, guildId);
+    // Use fixed guild_id for balance lookup (1196165488565289012)
+    const fixedGuildId = '1196165488565289012';
+    const user = await getOrCreateUser(userId, fixedGuildId);
     res.json({ user_id: user.user_id, balance: user.balance });
   } catch (error) {
     console.error('Balance endpoint error:', error);
@@ -315,13 +309,12 @@ io.use(async (socket, next) => {
     const token = socket.handshake.auth.token;
     const username = socket.handshake.auth.username;
     const globalName = socket.handshake.auth.globalName;
-    const guildId = socket.handshake.auth.guildId;
 
     if (!token) {
       return next(new Error('Authentication token missing'));
     }
 
-    const user = await authenticateSocket(token, username, globalName, guildId);
+    const user = await authenticateSocket(token, username, globalName);
     if (!user) {
       return next(new Error('Invalid authentication token'));
     }

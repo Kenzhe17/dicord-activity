@@ -10,19 +10,26 @@ export interface User {
   balance: number;
 }
 
-export async function getUser(userId: string): Promise<User | null> {
+export async function getUser(userId: string, fixedGuildId?: string): Promise<User | null> {
   try {
     console.log('[DB] getUser called with userId:', userId);
     console.log('[DB] userId type:', typeof userId);
+    console.log('[DB] fixedGuildId:', fixedGuildId);
 
     // Use BigInt to preserve full 64-bit precision for Discord snowflake IDs
     const userIdBigInt = BigInt(userId);
     console.log('[DB] Parsed userIdBigInt:', userIdBigInt.toString());
 
-    const result = await pool.query(
-      'SELECT user_id, balance FROM user_balance WHERE user_id = $1',
-      [userIdBigInt]
-    );
+    // Query with both user_id and guild_id if provided
+    let query = 'SELECT user_id, balance FROM user_balance WHERE user_id = $1';
+    const params: any[] = [userIdBigInt];
+
+    if (fixedGuildId) {
+      query += ' AND guild_id = $2';
+      params.push(BigInt(fixedGuildId));
+    }
+
+    const result = await pool.query(query, params);
     if (result.rows[0]) {
       // Convert number back to string for consistency
       return {
@@ -68,10 +75,12 @@ export async function getOrCreateUser(userId: string, guildId?: string): Promise
     };
   }
 
-  let user = await getUser(userId);
+  // Use fixed guild_id for balance lookup (1196165488565289012)
+  const fixedGuildId = '1196165488565289012';
+  let user = await getUser(userId, fixedGuildId);
   if (!user) {
-    console.log(`[DB] Creating new user in user_balance table: ${userId}, guildId: ${guildId}`);
-    user = await createUser(userId, 0, guildId);
+    console.log(`[DB] Creating new user in user_balance table: ${userId}, guildId: ${fixedGuildId}`);
+    user = await createUser(userId, 0, fixedGuildId);
   }
   return user;
 }
