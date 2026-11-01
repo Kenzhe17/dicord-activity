@@ -10,7 +10,7 @@ COPY apps/server/package*.json ./apps/server/
 COPY packages/shared/package*.json ./packages/shared/
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source files
 COPY packages/shared ./packages/shared
@@ -37,7 +37,7 @@ COPY apps/server/package*.json ./apps/server/
 COPY packages/shared/package*.json ./packages/shared/
 
 # Install production dependencies only
-RUN npm ci --production
+RUN npm install --production
 
 # Copy built files
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
