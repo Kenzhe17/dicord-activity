@@ -8,6 +8,7 @@ export interface DiscordUser {
   globalName: string | null;
   avatar: string | null;
   discriminator: string;
+  balance?: number;
 }
 
 export interface Player {
@@ -16,6 +17,7 @@ export interface Player {
   isReady: boolean;
   isOwner: boolean;
   joinedAt: number;
+  balance?: number;
 }
 
 export interface Room {

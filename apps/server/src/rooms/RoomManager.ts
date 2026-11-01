@@ -30,6 +30,7 @@ export class RoomManager {
       isReady: false,
       isOwner: true,
       joinedAt: Date.now(),
+      balance: owner.balance,
     };
 
     const room: Room = {
@@ -85,6 +86,7 @@ export class RoomManager {
       isReady: false,
       isOwner: false,
       joinedAt: Date.now(),
+      balance: user.balance,
     };
 
     room.players.push(player);
