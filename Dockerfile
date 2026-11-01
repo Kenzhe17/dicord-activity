@@ -3,6 +3,9 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# Force cache busting
+RUN echo "Build timestamp: $(date)"
+
 # Copy package files
 COPY package*.json ./
 COPY apps/web/package*.json ./apps/web/
