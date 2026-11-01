@@ -9,7 +9,7 @@ import { config } from './config';
 import { setupSocketIO } from './sockets/socketHandler';
 import { authenticateSocket } from './middleware/auth';
 import { RoomManager } from './rooms/RoomManager';
-import { getOrCreateUser, updateBalance, checkPoolConnection } from './db/postgres';
+import { getOrCreateUser, updateBalance, checkPoolConnection, pool } from './db/postgres';
 
 dotenv.config();
 
