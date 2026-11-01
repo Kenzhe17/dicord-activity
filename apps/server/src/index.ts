@@ -197,6 +197,17 @@ app.get('/api/db/health', async (req, res) => {
   res.json({ healthy: isHealthy });
 });
 
+// Debug endpoint to check existing users
+app.get('/api/db/users', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT user_id, balance, guild_id FROM user_balance LIMIT 10');
+    res.json({ users: result.rows });
+  } catch (error) {
+    console.error('DB users check error:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
 // Debug endpoint to check config
 app.get('/api/debug/config', (req, res) => {
   // Force HTTPS for Railway (behind proxy)

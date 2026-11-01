@@ -18,6 +18,7 @@ export async function getUser(userId: string): Promise<User | null> {
     // Convert Discord user_id (string) to number for bigint column
     const userIdNum = parseInt(userId, 10);
     console.log('[DB] Parsed userIdNum:', userIdNum, 'isNaN:', isNaN(userIdNum));
+    console.log('[DB] Precision check - original:', userId, 'parsed:', userIdNum, 'match:', userId === userIdNum.toString());
 
     if (isNaN(userIdNum)) {
       console.error('[DB] userId is not a valid number:', userId);
