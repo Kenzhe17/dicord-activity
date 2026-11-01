@@ -1,6 +1,12 @@
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 
-export const discordSdk = new DiscordSDK(import.meta.env.VITE_DISCORD_CLIENT_ID);
+// Get client ID from window config (injected by server) or env or fallback
+const getClientId = () => {
+  // @ts-ignore
+  return window.__DISCORD_CONFIG?.clientId || import.meta.env.VITE_DISCORD_CLIENT_ID || '1566376251185168394';
+};
+
+export const discordSdk = new DiscordSDK(getClientId());
 
 export interface DiscordAuth {
   access_token: string;
@@ -16,11 +22,13 @@ export interface DiscordAuth {
 export async function initializeDiscordSDK(): Promise<DiscordAuth> {
   try {
     console.log('Discord SDK: Starting initialization...');
+    console.log('Client ID:', getClientId());
+    
     await discordSdk.ready();
     console.log('Discord SDK: Ready');
 
     const { code } = await discordSdk.commands.authorize({
-      client_id: import.meta.env.VITE_DISCORD_CLIENT_ID,
+      client_id: getClientId(),
       response_type: 'code',
       scope: ['identify', 'activities.read'],
     });

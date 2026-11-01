@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { config } from './config';
 import { setupSocketIO } from './sockets/socketHandler';
 import { authenticateSocket } from './middleware/auth';
@@ -50,11 +51,57 @@ app.use(express.json());
 // Serve static files from frontend build in production
 if (process.env.NODE_ENV === 'production') {
   const frontendDistPath = path.join(__dirname, '../../web/dist');
+  console.log('Serving static files from:', frontendDistPath);
+  console.log('Directory exists:', fs.existsSync(frontendDistPath));
+  
   app.use(express.static(frontendDistPath, { fallthrough: true }));
 
-  // Serve index.html for all routes (SPA routing)
+  // Inject config into index.html
+  app.get('/', (req, res) => {
+    const indexPath = path.join(frontendDistPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      let html = fs.readFileSync(indexPath, 'utf-8');
+      
+      // Inject Discord config into HTML
+      const configScript = `
+        <script>
+          window.__DISCORD_CONFIG = {
+            clientId: '${process.env.DISCORD_CLIENT_ID || '1566376251185168394'}',
+            serverUrl: '${process.env.CORS_ORIGIN || window.location.origin}'
+          };
+        </script>
+      `;
+      
+      // Insert before closing head tag
+      html = html.replace('</head>', configScript + '</head>');
+      
+      res.send(html);
+    } else {
+      res.status(404).send('index.html not found');
+    }
+  });
+
+  // Serve index.html for all other routes (SPA routing)
   app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendDistPath, 'index.html'));
+    const indexPath = path.join(frontendDistPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      let html = fs.readFileSync(indexPath, 'utf-8');
+      
+      const configScript = `
+        <script>
+          window.__DISCORD_CONFIG = {
+            clientId: '${process.env.DISCORD_CLIENT_ID || '1566376251185168394'}',
+            serverUrl: '${process.env.CORS_ORIGIN || window.location.origin}'
+          };
+        </script>
+      `;
+      
+      html = html.replace('</head>', configScript + '</head>');
+      
+      res.send(html);
+    } else {
+      res.status(404).send('index.html not found');
+    }
   });
 }
 
