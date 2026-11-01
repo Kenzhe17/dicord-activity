@@ -3,17 +3,14 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Force cache busting
-RUN echo "Build timestamp: $(date)"
-
 # Copy package files
 COPY package*.json ./
 COPY apps/web/package*.json ./apps/web/
 COPY apps/server/package*.json ./apps/server/
 COPY packages/shared/package*.json ./packages/shared/
 
-# Install dependencies
-RUN npm install
+# Install all dependencies (dev + prod)
+RUN npm install --no-package-lock
 
 # Copy source files
 COPY packages/shared ./packages/shared
@@ -40,7 +37,7 @@ COPY apps/server/package*.json ./apps/server/
 COPY packages/shared/package*.json ./packages/shared/
 
 # Install production dependencies only
-RUN npm install --production
+RUN npm install --production --no-package-lock
 
 # Copy built files
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
