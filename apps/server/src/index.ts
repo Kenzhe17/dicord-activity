@@ -70,9 +70,16 @@ app.post('/api/auth/discord/token', async (req, res) => {
   try {
     const { code } = req.body;
 
+    console.log('[OAuth] Request received, code present:', !!code);
+
     if (!code) {
+      console.log('[OAuth] Error: Code is required');
       return res.status(400).json({ error: 'Code is required' });
     }
+
+    console.log('[OAuth] Client ID:', config.discord.clientId);
+    console.log('[OAuth] Client Secret present:', !!config.discord.clientSecret);
+    console.log('[OAuth] Redirect URI:', config.discord.redirectUri);
 
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
@@ -88,14 +95,19 @@ app.post('/api/auth/discord/token', async (req, res) => {
       }),
     });
 
+    console.log('[OAuth] Discord API response status:', tokenResponse.status);
+
     if (!tokenResponse.ok) {
-      return res.status(400).json({ error: 'Failed to exchange code for token' });
+      const errorText = await tokenResponse.text();
+      console.log('[OAuth] Discord API error:', errorText);
+      return res.status(400).json({ error: 'Failed to exchange code for token', details: errorText });
     }
 
     const tokenData = await tokenResponse.json();
+    console.log('[OAuth] Token exchange successful');
     res.json(tokenData);
   } catch (error) {
-    console.error('OAuth error:', error);
+    console.error('[OAuth] Exception:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
