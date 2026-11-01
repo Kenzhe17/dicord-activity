@@ -1,5 +1,5 @@
 export const config = {
-  port: process.env.PORT || 3001,
+  port: parseInt(process.env.PORT || '3001', 10),
   corsOrigin: process.env.CORS_ORIGIN || '*',
   discord: {
     clientId: process.env.DISCORD_CLIENT_ID || '',

@@ -24,7 +24,7 @@ app.use(express.json());
 // Serve static files from frontend build in production
 if (process.env.NODE_ENV === 'production') {
   const frontendDistPath = path.join(__dirname, '../../apps/web/dist');
-  app.use(express.static(frontendDistPath));
+  app.use(express.static(frontendDistPath, { fallthrough: true }));
 
   // Serve index.html for all routes (SPA routing)
   app.get('*', (req, res) => {
