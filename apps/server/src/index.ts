@@ -293,22 +293,10 @@ const io = new Server(httpServer, {
   },
 });
 
-// Socket.IO authentication middleware (temporarily disabled for testing)
+// Socket.IO authentication middleware
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
-    
-    // For testing with mock tokens, skip real authentication
-    if (token === 'mock_token') {
-      socket.data.user = {
-        id: 'mock_user_123',
-        username: 'Test User',
-        globalName: 'Test User',
-        avatar: null,
-        discriminator: '0000',
-      };
-      return next();
-    }
 
     if (!token) {
       return next(new Error('Authentication token missing'));
@@ -320,8 +308,10 @@ io.use(async (socket, next) => {
     }
 
     socket.data.user = user;
+    console.log(`[SOCKET] User authenticated: ${user.id} (balance: ${user.balance})`);
     next();
   } catch (error) {
+    console.error('[SOCKET] Authentication error:', error);
     next(new Error('Authentication failed'));
   }
 });
