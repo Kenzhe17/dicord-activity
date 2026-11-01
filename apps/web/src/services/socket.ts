@@ -1,8 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { z } from 'zod';
 import {
-  ClientToServerEvents,
-  ServerToClientEvents,
   CreateRoomSchema,
   JoinRoomSchema,
   LeaveRoomSchema,
@@ -12,9 +10,9 @@ import {
   ReconnectRoomSchema,
 } from '@rize3-arcade/shared/dist/index.js';
 
-let socket: Socket<ClientToServerEvents, ServerToClientEvents> | null = null;
+let socket: Socket | null = null;
 
-export function initializeSocket(token: string): Socket<ClientToServerEvents, ServerToClientEvents> {
+export function initializeSocket(token: string): Socket {
   if (socket) {
     socket.disconnect();
   }
@@ -27,7 +25,7 @@ export function initializeSocket(token: string): Socket<ClientToServerEvents, Se
   return socket;
 }
 
-export function getSocket(): Socket<ClientToServerEvents, ServerToClientEvents> | null {
+export function getSocket(): Socket | null {
   return socket;
 }
 

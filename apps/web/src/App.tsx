@@ -21,28 +21,28 @@ function App() {
     if (auth) {
       const socket = initializeSocket(auth.access_token);
 
-      socket.on('room_created', (data) => {
+      socket.on('room_created', (data: any) => {
         setCurrentRoom(data.room);
         setCurrentView('lobby');
       });
 
-      socket.on('room_updated', (data) => {
+      socket.on('room_updated', (data: any) => {
         setCurrentRoom(data.room);
       });
 
-      socket.on('player_joined', (data) => {
+      socket.on('player_joined', (data: any) => {
         setCurrentRoom(data.room);
       });
 
-      socket.on('player_left', (data) => {
+      socket.on('player_left', (data: any) => {
         setCurrentRoom(data.room);
       });
 
-      socket.on('game_started', (data) => {
+      socket.on('game_started', (data: any) => {
         console.log('Game started:', data);
       });
 
-      socket.on('error', (data) => {
+      socket.on('error', (data: any) => {
         console.error('Socket error:', data);
       });
 
@@ -200,7 +200,7 @@ function App() {
               onCreate={(data) => {
                 const socket = getSocket();
                 if (socket) {
-                  socket.emit('create_room', data);
+                  (socket as any).emit('create_room', data);
                 }
               }}
             />
@@ -212,7 +212,7 @@ function App() {
               onJoin={(roomCode) => {
                 const socket = getSocket();
                 if (socket) {
-                  socket.emit('join_room', { roomCode });
+                  (socket as any).emit('join_room', { roomCode });
                 }
               }}
             />
@@ -225,7 +225,7 @@ function App() {
               onLeave={() => {
                 const socket = getSocket();
                 if (socket) {
-                  socket.emit('leave_room', { roomId: currentRoom.id });
+                  (socket as any).emit('leave_room', { roomId: currentRoom.id });
                 }
                 setCurrentRoom(null);
                 setCurrentView('menu');
@@ -233,13 +233,13 @@ function App() {
               onReady={(isReady) => {
                 const socket = getSocket();
                 if (socket) {
-                  socket.emit('player_ready', { roomId: currentRoom.id, isReady });
+                  (socket as any).emit('player_ready', { roomId: currentRoom.id, isReady });
                 }
               }}
               onStartGame={() => {
                 const socket = getSocket();
                 if (socket) {
-                  socket.emit('start_game', { roomId: currentRoom.id });
+                  (socket as any).emit('start_game', { roomId: currentRoom.id });
                 }
               }}
             />
