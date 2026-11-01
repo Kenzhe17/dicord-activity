@@ -62,12 +62,15 @@ if (process.env.NODE_ENV === 'production') {
     if (fs.existsSync(indexPath)) {
       let html = fs.readFileSync(indexPath, 'utf-8');
       
+      // Build server URL from request
+      const serverUrl = `${req.protocol}://${req.get('host')}`;
+      
       // Inject Discord config into HTML
       const configScript = `
         <script>
           window.__DISCORD_CONFIG = {
             clientId: '${process.env.DISCORD_CLIENT_ID || '1566376251185168394'}',
-            serverUrl: '${process.env.CORS_ORIGIN || window.location.origin}'
+            serverUrl: '${process.env.CORS_ORIGIN || serverUrl}'
           };
         </script>
       `;
@@ -87,11 +90,14 @@ if (process.env.NODE_ENV === 'production') {
     if (fs.existsSync(indexPath)) {
       let html = fs.readFileSync(indexPath, 'utf-8');
       
+      // Build server URL from request
+      const serverUrl = `${req.protocol}://${req.get('host')}`;
+      
       const configScript = `
         <script>
           window.__DISCORD_CONFIG = {
             clientId: '${process.env.DISCORD_CLIENT_ID || '1566376251185168394'}',
-            serverUrl: '${process.env.CORS_ORIGIN || window.location.origin}'
+            serverUrl: '${process.env.CORS_ORIGIN || serverUrl}'
           };
         </script>
       `;
