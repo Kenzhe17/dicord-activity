@@ -13,22 +13,32 @@ export interface DiscordAuth {
 
 export async function initializeDiscordSDK(): Promise<DiscordAuth> {
   try {
-    console.log('Discord SDK: Skipping initialization (using mock data)');
+    console.log('Discord SDK: Initializing...');
     
-    // Return mock user data for testing
-    const user = {
-      id: 'mock_user_123',
-      username: 'Test User',
-      globalName: 'Test User',
-      avatar: null,
-      discriminator: '0000',
-    };
-
-    console.log('Discord SDK: Using mock user data');
+    const clientId = __DISCORD_CLIENT_ID__;
+    console.log('Discord SDK: Client ID:', clientId);
+    
+    const discordSdk = new DiscordSDK(clientId);
+    
+    console.log('Discord SDK: Waiting for ready...');
+    await discordSdk.ready();
+    console.log('Discord SDK: Ready');
+    
+    const auth = await discordSdk.commands.authenticate({
+      access_token: null as any,
+    });
+    
+    console.log('Discord SDK: Authenticated', auth);
     
     return {
-      access_token: 'mock_token',
-      user,
+      access_token: auth.access_token,
+      user: {
+        id: auth.user.id,
+        username: auth.user.username,
+        globalName: auth.user.global_name || null,
+        avatar: auth.user.avatar || null,
+        discriminator: auth.user.discriminator,
+      },
     };
   } catch (error) {
     console.error('Discord SDK initialization error:', error);
