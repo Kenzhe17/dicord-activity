@@ -11,7 +11,7 @@ import { RoomLobby } from './components/RoomLobby';
 import { Loader2, Users, Gamepad2 } from 'lucide-react';
 
 function App() {
-  const { auth, loading, error, getAvatarUrl } = useAuth();
+  const { auth, loading, error, getAvatarUrl, isDiscord } = useAuth();
   const [currentView, setCurrentView] = useState<'menu' | 'create-room' | 'join-room' | 'lobby'>('menu');
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
@@ -73,6 +73,28 @@ function App() {
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-gold mx-auto mb-4" />
           <p className="text-secondary-text">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isDiscord) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center max-w-md p-6">
+          <Gamepad2 className="w-16 h-16 text-gold mx-auto mb-6" />
+          <h1 className="text-2xl font-bold mb-4">r!z3 Arcade</h1>
+          <p className="text-secondary-text mb-6">
+            Это приложение должно запускаться внутри Discord Activity.
+          </p>
+          <div className="glass-panel p-4 text-left text-sm">
+            <p className="text-gold font-semibold mb-2">Как запустить:</p>
+            <ol className="list-decimal list-inside space-y-2 text-secondary-text">
+              <li>Откройте Discord</li>
+              <li>Перейдите на сервер с ботом</li>
+              <li>Запустите Activity r!z3 Arcade</li>
+            </ol>
+          </div>
         </div>
       </div>
     );
