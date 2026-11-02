@@ -76,7 +76,7 @@ export function RoomLobby({ room, currentUserId, onLeave, onReady, onStartGame }
                   }}
                 />
                 <div>
-                  <p className="font-semibold">{player.discordUser.globalName || player.discordUser.username}</p>
+                  <p className="font-semibold">{player.discordUser.username}</p>
                   {player.isOwner && (
                     <p className="text-gold text-sm">Владелец</p>
                   )}

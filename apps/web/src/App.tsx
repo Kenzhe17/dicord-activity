@@ -177,7 +177,7 @@ function App() {
               alt={auth.user.username}
               className="w-10 h-10 rounded-full border-2 border-gold"
             />
-            <span className="font-semibold">{auth.user.globalName || auth.user.username}</span>
+            <span className="font-semibold">{auth.user.username}</span>
           </div>
           <div className="glass-panel px-4 py-2">
             <span className="text-gold font-bold">Баланс: {balance}</span>
