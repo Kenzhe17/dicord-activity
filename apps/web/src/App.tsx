@@ -7,7 +7,7 @@ import { GameCard } from './components/GameCard';
 import { RoomList } from './components/RoomList';
 import { CreateRoomModal } from './components/CreateRoomModal';
 import { RoomLobby } from './components/RoomLobby';
-import { Loader2, Users, Gamepad2 } from 'lucide-react';
+import { Loader2, Users, Gamepad2, RefreshCw } from 'lucide-react';
 
 function App() {
   const { auth, loading, error, getAvatarUrl, isDiscord } = useAuth();
@@ -17,6 +17,7 @@ function App() {
   const [stats, setStats] = useState({ activeRooms: 0, totalPlayers: 0 });
   const [balance, setBalance] = useState<number>(0);
   const [gameState, setGameState] = useState<any>(null);
+  const [roomListKey, setRoomListKey] = useState(0);
 
   // Catch global errors for debugging
   useEffect(() => {
@@ -68,12 +69,18 @@ function App() {
         setCurrentRoom(data.room);
       });
 
-      socket.on('game_started', (data: any) => {
-        console.log('Game started:', data);
+      socket.on('room_updated', (data: any) => {
+        console.log('Room updated:', data);
         if (currentRoom && currentRoom.id === data.room.id) {
           setCurrentRoom(data.room);
-          setGameState(data.gameState);
         }
+      });
+
+      socket.on('game_started', (data: any) => {
+        console.log('Game started:', data);
+        // Update room and game state regardless of ID check
+        setCurrentRoom(data.room);
+        setGameState(data.gameState);
       });
 
       socket.on('room_closed', (data: any) => {
@@ -270,8 +277,18 @@ function App() {
 
               {/* Public Rooms */}
               <div>
-                <h2 className="text-xl font-bold mb-4">Доступные комнаты ({stats.activeRooms})</h2>
-                <RoomList onJoin={(roomCode, password) => {
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold">Доступные комнаты ({stats.activeRooms})</h2>
+                  <button
+                    onClick={() => {
+                      setRoomListKey(prev => prev + 1);
+                    }}
+                    className="btn-secondary"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                  </button>
+                </div>
+                <RoomList key={roomListKey} onJoin={(roomCode, password) => {
                   socketService.joinRoom({ roomCode, password });
                 }} />
               </div>

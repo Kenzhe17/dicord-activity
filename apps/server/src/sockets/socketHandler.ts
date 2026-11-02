@@ -257,12 +257,14 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
         room.gameSettings.gameState = gameState;
         const updatedRoom = RoomManager.setRoomStatus(validated.roomId, 'playing');
 
+        // Emit both events to ensure UI updates
+        io.to(validated.roomId).emit('room_updated', { room: updatedRoom || room });
         io.to(validated.roomId).emit('game_started', {
           room: updatedRoom || room,
           gameState,
         });
 
-        console.log(`Durak game started in room ${room.code}`);
+        console.log(`Durak game started in room ${room.code}, status: ${updatedRoom?.status}`);
       } catch (error) {
         if (error instanceof z.ZodError) {
           socket.emit('error', {
