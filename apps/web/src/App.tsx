@@ -6,13 +6,12 @@ import { Room, GameType } from '@rize3-arcade/shared/dist/index.js';
 import { GameCard } from './components/GameCard';
 import { RoomList } from './components/RoomList';
 import { CreateRoomModal } from './components/CreateRoomModal';
-import { JoinRoomModal } from './components/JoinRoomModal';
 import { RoomLobby } from './components/RoomLobby';
 import { Loader2, Users, Gamepad2 } from 'lucide-react';
 
 function App() {
   const { auth, loading, error, getAvatarUrl, isDiscord } = useAuth();
-  const [currentView, setCurrentView] = useState<'menu' | 'create-room' | 'join-room' | 'lobby'>('menu');
+  const [currentView, setCurrentView] = useState<'menu' | 'create-room' | 'lobby'>('menu');
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [stats, setStats] = useState({ activeRooms: 0, totalPlayers: 0 });
@@ -35,6 +34,8 @@ function App() {
       socket.on('room_created', (data: any) => {
         setCurrentRoom(data.room);
         setCurrentView('lobby');
+        // Refresh balance after deducting bet
+        fetchBalance();
       });
 
       socket.on('room_updated', (data: any) => {
@@ -53,6 +54,8 @@ function App() {
         console.log('Join success:', data);
         setCurrentRoom(data.room);
         setCurrentView('lobby');
+        // Refresh balance after deducting bet
+        fetchBalance();
       });
 
       socket.on('join_error', (data: any) => {
@@ -208,12 +211,6 @@ function App() {
                 >
                   Создать комнату
                 </button>
-                <button
-                  onClick={() => setCurrentView('join-room')}
-                  className="btn-secondary"
-                >
-                  Присоединиться
-                </button>
               </div>
 
               {/* Game Cards */}
@@ -243,14 +240,6 @@ function App() {
                   disabled={true}
                 />
               </div>
-
-              {/* Public Rooms */}
-              <div>
-                <h2 className="text-xl font-bold mb-4">Доступные комнаты ({stats.activeRooms})</h2>
-                <RoomList onJoin={(roomCode) => {
-                  socketService.joinRoom({ roomCode });
-                }} />
-              </div>
             </motion.div>
           )}
 
@@ -260,15 +249,6 @@ function App() {
               onClose={() => setCurrentView('menu')}
               onCreate={(data) => {
                 socketService.createRoom(data);
-              }}
-            />
-          )}
-
-          {currentView === 'join-room' && (
-            <JoinRoomModal
-              onClose={() => setCurrentView('menu')}
-              onJoin={(roomCode) => {
-                socketService.joinRoom({ roomCode });
               }}
             />
           )}

@@ -7,10 +7,13 @@ export const CreateRoomSchema = z.object({
   gameSettings: z.record(z.unknown()).optional(),
   maxPlayers: z.number().min(2).max(12).optional(),
   isPublic: z.boolean().optional(),
+  bet: z.number().min(100).max(5000),
+  password: z.string().min(1),
 });
 
 export const JoinRoomSchema = z.object({
   roomCode: z.string().min(4).max(8),
+  password: z.string().min(1),
 });
 
 export const LeaveRoomSchema = z.object({

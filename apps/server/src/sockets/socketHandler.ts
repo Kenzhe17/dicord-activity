@@ -36,7 +36,9 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
           user,
           validated.gameSettings,
           validated.maxPlayers,
-          validated.isPublic
+          validated.isPublic,
+          validated.bet,
+          validated.password
         );
 
         socket.join(room.id);
@@ -80,18 +82,18 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
 
         const room = RoomManager.getRoomByCode(validated.roomCode);
         if (!room) {
-          socket.emit('error', {
+          socket.emit('join_error', {
             code: 'ROOM_NOT_FOUND',
             message: 'Room not found',
           });
           return;
         }
 
-        const updatedRoom = RoomManager.joinRoom(room.id, user);
+        const updatedRoom = RoomManager.joinRoom(room.id, user, validated.password);
         if (!updatedRoom) {
           socket.emit('join_error', {
-            code: 'ROOM_FULL',
-            message: 'Room is full',
+            code: 'JOIN_FAILED',
+            message: 'Invalid password, room full, or insufficient balance',
           });
           return;
         }

@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Room } from '@rize3-arcade/shared/dist/index.js';
 import { motion } from 'framer-motion';
-import { Users, Lock, Gamepad2 } from 'lucide-react';
+import { Users, Gamepad2 } from 'lucide-react';
 
 interface RoomListProps {
-  onJoin: (roomCode: string) => void;
+  onJoin: (roomCode: string, password: string) => void;
 }
 
 export function RoomList({ onJoin }: RoomListProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
+  const [passwordInputs, setPasswordInputs] = useState<Record<string, string>>({});
 
   useEffect(() => {
     async function fetchRooms() {
@@ -58,17 +59,33 @@ export function RoomList({ onJoin }: RoomListProps) {
             <div className="text-secondary-text">
               Владелец: {room.owner?.discordUser?.username || room.players[0]?.discordUser?.username || 'Неизвестно'}
             </div>
+            <div className="text-secondary-text">
+              Ставка: {room.bet}
+            </div>
+            <div className="text-secondary-text">
+              Банк: {room.bank}
+            </div>
             <div className="flex items-center gap-2 text-secondary-text">
               <Users className="w-4 h-4" />
               <span>{Array.isArray(room.players) ? room.players.length : 0}/{room.maxPlayers || 6}</span>
             </div>
           </div>
-          <button
-            onClick={() => onJoin(room.code)}
-            className="btn-gold w-full"
-          >
-            Войти
-          </button>
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Пароль"
+              value={passwordInputs[room.id] || ''}
+              onChange={(e) => setPasswordInputs({ ...passwordInputs, [room.id]: e.target.value })}
+              className="w-full p-2 rounded border border-gold bg-gold/10 text-sm"
+            />
+            <button
+              onClick={() => onJoin(room.code, passwordInputs[room.id] || '')}
+              className="btn-gold w-full"
+              disabled={!passwordInputs[room.id]}
+            >
+              Войти
+            </button>
+          </div>
         </motion.div>
       ))}
     </div>

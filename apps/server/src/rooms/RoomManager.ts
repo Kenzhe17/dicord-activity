@@ -19,10 +19,15 @@ export class RoomManager {
     owner: DiscordUser,
     settings: Record<string, unknown> = {},
     maxPlayers: number = 6,
-    isPublic: boolean = true
+    isPublic: boolean = true,
+    bet: number = 100,
+    password: string = ''
   ): Room {
     const roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const roomCode = this.generateRoomCode();
+
+    // Deduct bet from owner's balance
+    const updatedBalance = owner.balance - bet;
 
     const player: Player = {
       id: owner.id,
@@ -30,7 +35,7 @@ export class RoomManager {
       isReady: false,
       isOwner: true,
       joinedAt: Date.now(),
-      balance: owner.balance,
+      balance: updatedBalance,
     };
 
     const room: Room = {
@@ -44,6 +49,9 @@ export class RoomManager {
       createdAt: Date.now(),
       status: 'waiting',
       owner: player, // Set owner for easy access
+      bet,
+      password,
+      bank: bet, // Owner's bet starts the bank
     };
 
     this.rooms.set(roomId, room);
@@ -69,7 +77,7 @@ export class RoomManager {
     return this.rooms.get(roomId);
   }
 
-  static joinRoom(roomId: string, user: DiscordUser): Room | null {
+  static joinRoom(roomId: string, user: DiscordUser, password: string): Room | null {
     const room = this.rooms.get(roomId);
     if (!room) return null;
 
@@ -81,17 +89,28 @@ export class RoomManager {
       return room;
     }
 
+    // Check password
+    if (room.password !== password) {
+      return null;
+    }
+
+    // Check if user has enough balance
+    if (user.balance < room.bet) {
+      return null;
+    }
+
     const player: Player = {
       id: user.id,
       discordUser: user,
       isReady: false,
       isOwner: false,
       joinedAt: Date.now(),
-      balance: user.balance,
+      balance: user.balance - room.bet, // Deduct bet
     };
 
     room.players.push(player);
     this.roomIdByPlayer.set(user.id, roomId);
+    room.bank += room.bet; // Add bet to bank
 
     return room;
   }

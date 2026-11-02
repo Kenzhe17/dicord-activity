@@ -31,6 +31,9 @@ export interface Room {
   createdAt: number;
   status: 'waiting' | 'playing' | 'finished';
   owner?: Player; // Optional field for convenience
+  bet: number; // Entry bet amount
+  password: string; // Room password
+  bank: number; // Total bank from entry bets
 }
 
 export interface RoomState {

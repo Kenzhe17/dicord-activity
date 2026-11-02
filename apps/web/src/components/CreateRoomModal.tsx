@@ -6,13 +6,14 @@ import { X, Users, Settings } from 'lucide-react';
 interface CreateRoomModalProps {
   selectedGame: GameType | null;
   onClose: () => void;
-  onCreate: (data: { gameType: GameType; maxPlayers: number; isPublic: boolean }) => void;
+  onCreate: (data: { gameType: GameType; maxPlayers: number; bet: number; password: string }) => void;
 }
 
 export function CreateRoomModal({ selectedGame, onClose, onCreate }: CreateRoomModalProps) {
   const [gameType] = useState<GameType>('durak'); // Only Durak is available
   const [maxPlayers, setMaxPlayers] = useState(4);
-  const [isPublic, setIsPublic] = useState(true);
+  const [bet, setBet] = useState(100);
+  const [password, setPassword] = useState('');
 
   const gameConfig: Record<GameType, { min: number; max: number; default: number }> = {
     durak: { min: 2, max: 6, default: 4 },
@@ -71,30 +72,37 @@ export function CreateRoomModal({ selectedGame, onClose, onCreate }: CreateRoomM
               <div className="text-center text-gold font-bold mt-2">{maxPlayers}</div>
             </div>
 
-            {/* Public/Private */}
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold flex items-center gap-2">
-                <Settings className="w-4 h-4" />
-                Публичная комната
-              </label>
-              <button
-                onClick={() => setIsPublic(!isPublic)}
-                className={`w-12 h-6 rounded-full transition-all ${
-                  isPublic ? 'bg-gold' : 'bg-surface-secondary'
-                }`}
-              >
-                <div
-                  className={`w-5 h-5 bg-white rounded-full transition-all ${
-                    isPublic ? 'translate-x-6' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
+            {/* Bet Amount */}
+            <div>
+              <label className="block text-sm font-semibold mb-2">Ставка (100-5000)</label>
+              <input
+                type="number"
+                min={100}
+                max={5000}
+                value={bet}
+                onChange={(e) => setBet(Math.min(5000, Math.max(100, parseInt(e.target.value) || 100)))}
+                className="w-full p-3 rounded-lg border border-gold bg-gold/10"
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="block text-sm font-semibold mb-2">Пароль комнаты</label>
+              <input
+                type="text"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Введите пароль"
+                className="w-full p-3 rounded-lg border border-gold bg-gold/10"
+                required
+              />
             </div>
 
             {/* Create Button */}
             <button
-              onClick={() => onCreate({ gameType, maxPlayers, isPublic })}
+              onClick={() => onCreate({ gameType, maxPlayers, bet, password })}
               className="btn-gold w-full"
+              disabled={!password}
             >
               Создать
             </button>
