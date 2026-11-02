@@ -11,8 +11,6 @@ import {
   ClientToServerEvents,
   ServerToClientEvents,
   DiscordUser,
-  JoinSuccessEvent,
-  JoinErrorEvent,
 } from '@rize3-arcade/shared';
 import { RoomManager } from '../rooms/RoomManager';
 
@@ -91,11 +89,10 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
 
         const updatedRoom = RoomManager.joinRoom(room.id, user);
         if (!updatedRoom) {
-          const errorData: JoinErrorEvent = {
+          socket.emit('join_error', {
             code: 'ROOM_FULL',
             message: 'Room is full',
-          };
-          socket.emit('join_error', errorData);
+          });
           return;
         }
 
@@ -107,8 +104,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
           room: updatedRoom,
         });
 
-        const successData: JoinSuccessEvent = { room: updatedRoom };
-        socket.emit('join_success', successData);
+        socket.emit('join_success', { room: updatedRoom });
 
         console.log(`User ${user.username} joined room ${room.code}`);
       } catch (error) {
