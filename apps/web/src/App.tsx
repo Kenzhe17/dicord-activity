@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from './hooks/useAuth';
-import { initializeSocket, disconnectSocket, getSocket } from './services/socket';
+import { initializeSocket, disconnectSocket, getSocket, socketService } from './services/socket';
 import { Room, GameType } from '@rize3-arcade/shared/dist/index.js';
 import { GameCard } from './components/GameCard';
 import { RoomList } from './components/RoomList';
@@ -43,10 +43,21 @@ function App() {
 
       socket.on('player_joined', (data: any) => {
         setCurrentRoom(data.room);
-        // If we just joined by code, show lobby
-        if (currentView === 'join-room') {
+        // If we just joined by code or from public room list, show lobby
+        if (currentView === 'join-room' || currentView === 'menu') {
           setCurrentView('lobby');
         }
+      });
+
+      socket.on('join_success', (data: any) => {
+        console.log('Join success:', data);
+        setCurrentRoom(data.room);
+        setCurrentView('lobby');
+      });
+
+      socket.on('join_error', (data: any) => {
+        console.error('Join error:', data);
+        alert(data.message || 'Не удалось присоединиться к комнате');
       });
 
       socket.on('player_left', (data: any) => {
@@ -236,7 +247,9 @@ function App() {
               {/* Public Rooms */}
               <div>
                 <h2 className="text-xl font-bold mb-4">Доступные комнаты ({stats.activeRooms})</h2>
-                <RoomList onJoin={(roomCode) => console.log('Join room:', roomCode)} />
+                <RoomList onJoin={(roomCode) => {
+                  socketService.joinRoom({ roomCode });
+                }} />
               </div>
             </motion.div>
           )}
@@ -246,10 +259,7 @@ function App() {
               selectedGame={selectedGame}
               onClose={() => setCurrentView('menu')}
               onCreate={(data) => {
-                const socket = getSocket();
-                if (socket) {
-                  (socket as any).emit('create_room', data);
-                }
+                socketService.createRoom(data);
               }}
             />
           )}
@@ -258,10 +268,7 @@ function App() {
             <JoinRoomModal
               onClose={() => setCurrentView('menu')}
               onJoin={(roomCode) => {
-                const socket = getSocket();
-                if (socket) {
-                  (socket as any).emit('join_room', { roomCode });
-                }
+                socketService.joinRoom({ roomCode });
               }}
             />
           )}

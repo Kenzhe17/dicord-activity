@@ -52,6 +52,15 @@ export interface PlayerJoinedEvent {
   room: Room;
 }
 
+export interface JoinSuccessEvent {
+  room: Room;
+}
+
+export interface JoinErrorEvent {
+  code: string;
+  message: string;
+}
+
 export interface PlayerLeftEvent {
   playerId: string;
   room: Room;
@@ -106,4 +115,6 @@ export type ServerToClientEvents = {
   player_disconnected: (data: PlayerDisconnectedEvent) => void;
   game_finished: (data: GameFinishedEvent) => void;
   error: (data: ErrorEvent) => void;
+  join_success: (data: JoinSuccessEvent) => void;
+  join_error: (data: JoinErrorEvent) => void;
 };
