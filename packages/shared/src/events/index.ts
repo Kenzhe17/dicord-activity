@@ -75,7 +75,7 @@ export interface PlayerLeftEvent {
 
 export interface GameStartedEvent {
   room: Room;
-  initialState: unknown;
+  gameState: unknown;
 }
 
 export interface GameStateUpdatedEvent {

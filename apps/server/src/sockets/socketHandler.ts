@@ -318,10 +318,12 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
               const winnerShare = Math.floor(room.bank * 0.9);
               const winner = room.players.find(p => p.id === winnerId);
               
+              let updatedWinner = null;
+              
               if (winner) {
                 // Update winner's balance in database
                 // Note: This would need to be async in real implementation
-                const updatedWinner = {
+                updatedWinner = {
                   ...winner,
                   balance: (winner.balance ?? 0) + winnerShare,
                 };
