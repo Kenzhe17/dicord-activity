@@ -222,6 +222,15 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
           return;
         }
 
+        // Prevent starting game if already started
+        if (room.status === 'playing') {
+          socket.emit('error', {
+            code: 'GAME_ALREADY_STARTED',
+            message: 'Game has already started',
+          });
+          return;
+        }
+
         const owner = room.players.find(p => p.isOwner);
         if (owner?.id !== user.id) {
           socket.emit('error', {
@@ -244,10 +253,12 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
         const playerIds = room.players.map(p => p.id);
         const gameState = DurakGame.initializeGame(playerIds, 'podkidnoy');
 
-        RoomManager.setRoomStatus(validated.roomId, 'playing');
+        // Update room with game state
+        room.gameSettings.gameState = gameState;
+        const updatedRoom = RoomManager.setRoomStatus(validated.roomId, 'playing');
 
         io.to(validated.roomId).emit('game_started', {
-          room,
+          room: updatedRoom || room,
           gameState,
         });
 

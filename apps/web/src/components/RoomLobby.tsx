@@ -44,21 +44,15 @@ export function RoomLobby({ room, currentUserId, onLeave, onReady, onStartGame, 
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="flex-1 glass-panel p-4 flex items-center justify-between">
-              <span className="text-3xl font-bold tracking-widest">{room.code}</span>
-              <button onClick={copyRoomCode} className="text-gold hover:text-white transition-colors">
-                <Copy className="w-5 h-5" />
-              </button>
-            </div>
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-secondary-text">
               <Users className="w-5 h-5" />
               <span>{room.players.length}/{room.maxPlayers}</span>
             </div>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <div className="text-secondary-text">Ставка: <span className="text-gold font-bold">{room.bet}</span></div>
-            <div className="text-secondary-text">Банк: <span className="text-gold font-bold">{room.bank}</span></div>
+            <div className="flex items-center justify-between text-sm gap-6">
+              <div className="text-secondary-text">Ставка: <span className="text-gold font-bold">{room.bet}</span></div>
+              <div className="text-secondary-text">Банк: <span className="text-gold font-bold">{room.bank}</span></div>
+            </div>
           </div>
         </div>
       </div>

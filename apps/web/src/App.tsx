@@ -70,6 +70,10 @@ function App() {
 
       socket.on('game_started', (data: any) => {
         console.log('Game started:', data);
+        if (currentRoom && currentRoom.id === data.room.id) {
+          setCurrentRoom(data.room);
+          setGameState(data.gameState);
+        }
       });
 
       socket.on('room_closed', (data: any) => {
