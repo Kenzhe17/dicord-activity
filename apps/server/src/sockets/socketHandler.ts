@@ -13,6 +13,7 @@ import {
   DiscordUser,
 } from '@rize3-arcade/shared';
 import { RoomManager } from '../rooms/RoomManager';
+import { DurakGame } from '../games/durak/DurakGame';
 
 export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEvents>) {
   io.on('connection', (socket: Socket) => {
@@ -138,7 +139,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
           return;
         }
 
-        const room = RoomManager.leaveRoom(validated.roomId, user.id);
+        const room = await RoomManager.leaveRoom(validated.roomId, user.id);
         if (!room) {
           socket.leave(validated.roomId);
           socket.data.roomId = null;
@@ -239,14 +240,18 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
           return;
         }
 
+        // Initialize Durak game
+        const playerIds = room.players.map(p => p.id);
+        const gameState = DurakGame.initializeGame(playerIds, 'podkidnoy');
+
         RoomManager.setRoomStatus(validated.roomId, 'playing');
 
         io.to(validated.roomId).emit('game_started', {
           room,
-          initialState: null,
+          gameState,
         });
 
-        console.log(`Game started in room ${room.code}`);
+        console.log(`Durak game started in room ${room.code}`);
       } catch (error) {
         if (error instanceof z.ZodError) {
           socket.emit('error', {
@@ -271,10 +276,80 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
           return;
         }
 
-        socket.emit('error', {
-          code: 'NOT_IMPLEMENTED',
-          message: 'Game actions will be implemented in Stage 2',
-        });
+        const room = RoomManager.getRoomById(validated.roomId);
+        if (!room) {
+          socket.emit('error', {
+            code: 'ROOM_NOT_FOUND',
+            message: 'Room not found',
+          });
+          return;
+        }
+
+        // Handle Durak game actions
+        if (room.gameType === 'durak' && validated.action === 'play_card') {
+          const card = validated.data as any;
+          const gameState = room.gameSettings.gameState as any;
+          
+          if (!gameState) {
+            socket.emit('error', {
+              code: 'GAME_NOT_STARTED',
+              message: 'Game has not started',
+            });
+            return;
+          }
+
+          const newGameState = DurakGame.playCard(card, gameState, user.id);
+          
+          // Update room with new game state
+          room.gameSettings.gameState = newGameState;
+          
+          io.to(validated.roomId).emit('game_state_updated', {
+            roomId: validated.roomId,
+            gameState: newGameState,
+            playerView: { playerId: user.id, hand: gameState.deck },
+          });
+
+          // Check for win condition
+          if (gameState.deck.length === 0 || gameState.gamePhase === 'finished') {
+            const winnerId = DurakGame.calculateWinner(gameState, room.players.map(p => p.id));
+            
+            if (winnerId) {
+              // Distribute 90% of bank to winner
+              const winnerShare = Math.floor(room.bank * 0.9);
+              const winner = room.players.find(p => p.id === winnerId);
+              
+              if (winner) {
+                // Update winner's balance in database
+                // Note: This would need to be async in real implementation
+                const updatedWinner = {
+                  ...winner,
+                  balance: (winner.balance ?? 0) + winnerShare,
+                };
+                
+                // Update winner in room
+                const winnerIndex = room.players.findIndex(p => p.id === winnerId);
+                if (winnerIndex !== -1) {
+                  room.players[winnerIndex] = updatedWinner;
+                }
+              }
+
+              RoomManager.setRoomStatus(validated.roomId, 'finished');
+
+              io.to(validated.roomId).emit('game_finished', {
+                roomId: validated.roomId,
+                winner: updatedWinner,
+                results: { winnerShare, totalBank: room.bank },
+              });
+
+              console.log(`Game finished in room ${room.code}, winner: ${winnerId}, won: ${winnerShare}`);
+            }
+          }
+        } else {
+          socket.emit('error', {
+            code: 'NOT_IMPLEMENTED',
+            message: 'Game action not implemented',
+          });
+        }
       } catch (error) {
         if (error instanceof z.ZodError) {
           socket.emit('error', {
@@ -341,11 +416,22 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       if (roomId && user) {
         const room = RoomManager.getRoomById(roomId);
         if (room) {
-          io.to(roomId).emit('player_disconnected', {
-            playerId: user.id,
-            room,
-          });
-          console.log(`User ${user.username} disconnected from room ${room.code}`);
+          // Check if disconnecting user is the owner
+          const owner = room.players.find(p => p.isOwner);
+          if (owner?.id === user.id) {
+            // Close the room if owner disconnects
+            RoomManager.deleteRoom(roomId);
+            io.to(roomId).emit('room_closed', {
+              reason: 'owner_disconnected',
+            });
+            console.log(`Room ${room.code} closed because owner ${user.username} disconnected`);
+          } else {
+            io.to(roomId).emit('player_disconnected', {
+              playerId: user.id,
+              room,
+            });
+            console.log(`User ${user.username} disconnected from room ${room.code}`);
+          }
         }
       }
     });

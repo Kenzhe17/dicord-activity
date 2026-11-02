@@ -121,7 +121,7 @@ export class RoomManager {
     return room;
   }
 
-  static leaveRoom(roomId: string, playerId: string): Room | null {
+  static async leaveRoom(roomId: string, playerId: string): Promise<Room | null> {
     const room = this.rooms.get(roomId);
     if (!room) return null;
 
@@ -132,8 +132,18 @@ export class RoomManager {
     room.players.splice(playerIndex, 1);
     this.roomIdByPlayer.delete(playerId);
 
+    // Refund bet if game hasn't started
+    if (room.status === 'waiting') {
+      await updateBalance(playerId, room.bet);
+      room.bank -= room.bet;
+    }
+
     // Close room if owner leaves (even if other players are present)
     if (player.isOwner) {
+      // Refund all players' bets
+      for (const p of room.players) {
+        await updateBalance(p.id, room.bet);
+      }
       this.deleteRoom(roomId);
       return null;
     }

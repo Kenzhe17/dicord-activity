@@ -16,6 +16,7 @@ function App() {
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [stats, setStats] = useState({ activeRooms: 0, totalPlayers: 0 });
   const [balance, setBalance] = useState<number>(0);
+  const [gameState, setGameState] = useState<any>(null);
 
   // Catch global errors for debugging
   useEffect(() => {
@@ -69,6 +70,28 @@ function App() {
 
       socket.on('game_started', (data: any) => {
         console.log('Game started:', data);
+      });
+
+      socket.on('room_closed', (data: any) => {
+        console.log('Room closed:', data);
+        setCurrentRoom(null);
+        setCurrentView('menu');
+        alert('Комната была закрыта владельцем');
+      });
+
+      socket.on('game_state_updated', (data: any) => {
+        console.log('Game state updated:', data);
+        if (currentRoom && currentRoom.id === data.roomId) {
+          setCurrentRoom({ ...currentRoom, gameSettings: { ...currentRoom.gameSettings, gameState: data.gameState } });
+          setGameState(data.gameState);
+        }
+      });
+
+      socket.on('game_finished', (data: any) => {
+        console.log('Game finished:', data);
+        alert(`Игра завершена! Победитель: ${data.winner.discordUser.username}. Выигрыш: ${data.results.winnerShare}`);
+        // Refresh balance
+        fetchBalance();
       });
 
       socket.on('error', (data: any) => {
@@ -265,6 +288,7 @@ function App() {
             <RoomLobby
               room={currentRoom}
               currentUserId={auth.user.id}
+              gameState={gameState}
               onLeave={() => {
                 const socket = getSocket();
                 if (socket) {

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Room } from '@rize3-arcade/shared/dist/index.js';
+import { Room, DurakGameState } from '@rize3-arcade/shared/dist/index.js';
 import { Check, Users, Gamepad2, Copy, LogOut } from 'lucide-react';
 
 interface RoomLobbyProps {
@@ -8,13 +8,15 @@ interface RoomLobbyProps {
   onLeave: () => void;
   onReady: (isReady: boolean) => void;
   onStartGame: () => void;
+  gameState?: DurakGameState;
 }
 
-export function RoomLobby({ room, currentUserId, onLeave, onReady, onStartGame }: RoomLobbyProps) {
+export function RoomLobby({ room, currentUserId, onLeave, onReady, onStartGame, gameState }: RoomLobbyProps) {
   const currentPlayer = room.players.find(p => p.id === currentUserId);
   const isOwner = currentPlayer?.isOwner;
   const allReady = room.players.every(p => p.isReady);
   const canStart = isOwner && allReady && room.players.length >= 2;
+  const isPlaying = room.status === 'playing';
 
   const copyRoomCode = () => {
     navigator.clipboard.writeText(room.code);
@@ -129,7 +131,7 @@ export function RoomLobby({ room, currentUserId, onLeave, onReady, onStartGame }
       </div>
 
       {/* Start Game Button */}
-      {isOwner && (
+      {isOwner && !isPlaying && (
         <button
           onClick={() => {
             if (canStart) {
@@ -143,6 +145,43 @@ export function RoomLobby({ room, currentUserId, onLeave, onReady, onStartGame }
         >
           {!allReady ? 'Ожидание готовности всех игроков' : room.players.length < 2 ? 'Нужно минимум 2 игрока' : 'Начать игру'}
         </button>
+      )}
+
+      {/* Game UI (when playing) */}
+      {isPlaying && gameState && (
+        <div className="glass-panel p-6">
+          <h3 className="text-xl font-bold mb-4">Игра Дурак</h3>
+          
+          {/* Trump Card */}
+          {gameState.trumpCard && (
+            <div className="mb-4 p-4 bg-gold/10 rounded-lg">
+              <p className="text-sm text-secondary-text mb-2">Козырь:</p>
+              <div className="text-2xl font-bold">
+                {gameState.trumpCard.rank} {gameState.trumpCard.suit === 'hearts' ? '♥' : gameState.trumpCard.suit === 'diamonds' ? '♦' : gameState.trumpCard.suit === 'clubs' ? '♣' : '♠'}
+              </div>
+            </div>
+          )}
+
+          {/* Table Cards */}
+          <div className="mb-4">
+            <p className="text-sm text-secondary-text mb-2">Стол:</p>
+            <div className="flex gap-2 flex-wrap">
+              {gameState.table.map((card) => (
+                <div key={card.id} className="p-3 bg-surface-secondary rounded border border-gold/30 text-center">
+                  <div className="text-lg font-bold">{card.rank}</div>
+                  <div className="text-xs">{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</div>
+                </div>
+              ))}
+              {gameState.table.length === 0 && <p className="text-secondary-text">Пусто</p>}
+            </div>
+          </div>
+
+          {/* Game Info */}
+          <div className="text-sm text-secondary-text">
+            <p>Очередь: {room.players.find(p => p.id === gameState.currentTurn)?.discordUser.username || 'Неизвестно'}</p>
+            <p>Карт в колоде: {gameState.deck.length}</p>
+          </div>
+        </div>
       )}
     </motion.div>
   );
