@@ -29,7 +29,7 @@ export class RoomManager {
 
     // Deduct bet from owner's balance in database
     await updateBalance(owner.id, -bet);
-    const updatedBalance = owner.balance - bet;
+    const updatedBalance = (owner.balance ?? 0) - bet;
 
     const player: Player = {
       id: owner.id,
@@ -97,13 +97,13 @@ export class RoomManager {
     }
 
     // Check if user has enough balance
-    if (user.balance < room.bet) {
+    if ((user.balance ?? 0) < room.bet) {
       return null;
     }
 
     // Deduct bet from user's balance in database
     await updateBalance(user.id, -room.bet);
-    const updatedBalance = user.balance - room.bet;
+    const updatedBalance = (user.balance ?? 0) - room.bet;
 
     const player: Player = {
       id: user.id,
