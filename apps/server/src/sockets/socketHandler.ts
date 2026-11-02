@@ -31,7 +31,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
           return;
         }
 
-        const room = RoomManager.createRoom(
+        const room = await RoomManager.createRoom(
           validated.gameType,
           user,
           validated.gameSettings,
@@ -89,7 +89,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
           return;
         }
 
-        const updatedRoom = RoomManager.joinRoom(room.id, user, validated.password);
+        const updatedRoom = await RoomManager.joinRoom(room.id, user, validated.password);
         if (!updatedRoom) {
           socket.emit('join_error', {
             code: 'JOIN_FAILED',

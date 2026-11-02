@@ -240,6 +240,14 @@ function App() {
                   disabled={true}
                 />
               </div>
+
+              {/* Public Rooms */}
+              <div>
+                <h2 className="text-xl font-bold mb-4">Доступные комнаты ({stats.activeRooms})</h2>
+                <RoomList onJoin={(roomCode, password) => {
+                  socketService.joinRoom({ roomCode, password });
+                }} />
+              </div>
             </motion.div>
           )}
 

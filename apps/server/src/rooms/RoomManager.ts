@@ -1,4 +1,5 @@
 import { Room, Player, GameType, DiscordUser } from '@rize3-arcade/shared';
+import { updateBalance } from '../db/postgres';
 
 export class RoomManager {
   private static rooms: Map<string, Room> = new Map();
@@ -14,7 +15,7 @@ export class RoomManager {
     return code;
   }
 
-  static createRoom(
+  static async createRoom(
     gameType: GameType,
     owner: DiscordUser,
     settings: Record<string, unknown> = {},
@@ -22,11 +23,12 @@ export class RoomManager {
     isPublic: boolean = true,
     bet: number = 100,
     password: string = ''
-  ): Room {
+  ): Promise<Room> {
     const roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const roomCode = this.generateRoomCode();
 
-    // Deduct bet from owner's balance
+    // Deduct bet from owner's balance in database
+    await updateBalance(owner.id, -bet);
     const updatedBalance = owner.balance - bet;
 
     const player: Player = {
@@ -77,7 +79,7 @@ export class RoomManager {
     return this.rooms.get(roomId);
   }
 
-  static joinRoom(roomId: string, user: DiscordUser, password: string): Room | null {
+  static async joinRoom(roomId: string, user: DiscordUser, password: string): Promise<Room | null> {
     const room = this.rooms.get(roomId);
     if (!room) return null;
 
@@ -99,13 +101,17 @@ export class RoomManager {
       return null;
     }
 
+    // Deduct bet from user's balance in database
+    await updateBalance(user.id, -room.bet);
+    const updatedBalance = user.balance - room.bet;
+
     const player: Player = {
       id: user.id,
       discordUser: user,
       isReady: false,
       isOwner: false,
       joinedAt: Date.now(),
-      balance: user.balance - room.bet, // Deduct bet
+      balance: updatedBalance,
     };
 
     room.players.push(player);
