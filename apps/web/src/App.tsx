@@ -296,6 +296,9 @@ function App() {
                 }
                 setCurrentRoom(null);
                 setCurrentView('menu');
+                setGameState(null);
+                // Refresh balance after leaving (refund if applicable)
+                fetchBalance();
               }}
               onReady={(isReady) => {
                 const socket = getSocket();
