@@ -30,6 +30,7 @@ export interface Room {
   isPublic: boolean;
   createdAt: number;
   status: 'waiting' | 'playing' | 'finished';
+  owner?: Player; // Optional field for convenience
 }
 
 export interface RoomState {

@@ -43,6 +43,7 @@ export class RoomManager {
       isPublic,
       createdAt: Date.now(),
       status: 'waiting',
+      owner: player, // Set owner for easy access
     };
 
     this.rooms.set(roomId, room);
@@ -106,8 +107,10 @@ export class RoomManager {
     room.players.splice(playerIndex, 1);
     this.roomIdByPlayer.delete(playerId);
 
-    if (player.isOwner && room.players.length > 0) {
-      room.players[0].isOwner = true;
+    // Close room if owner leaves (even if other players are present)
+    if (player.isOwner) {
+      this.deleteRoom(roomId);
+      return null;
     }
 
     if (room.players.length === 0) {

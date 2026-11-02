@@ -56,7 +56,7 @@ export function RoomList({ onJoin }: RoomListProps) {
           </div>
           <div className="space-y-2 text-sm mb-3">
             <div className="text-secondary-text">
-              Владелец: {room.owner?.discordUser?.username || 'Неизвестно'}
+              Владелец: {room.owner?.discordUser?.username || room.players[0]?.discordUser?.username || 'Неизвестно'}
             </div>
             <div className="flex items-center gap-2 text-secondary-text">
               <Users className="w-4 h-4" />
