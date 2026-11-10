@@ -1,0 +1,84 @@
+## codex/arcade-rebuild
+ M Dockerfile
+ M README.md
+ M apps/server/package.json
+ D apps/server/src/auth/discord.ts
+ D apps/server/src/config/index.ts
+ D apps/server/src/db/postgres.ts
+ D apps/server/src/games/durak/DurakGame.ts
+ M apps/server/src/index.ts
+ D apps/server/src/middleware/auth.ts
+ D apps/server/src/rooms/RoomManager.ts
+ D apps/server/src/sockets/socketHandler.ts
+ D apps/server/tsconfig.json
+ M apps/web/index.html
+ M apps/web/package.json
+ D apps/web/postcss.config.js
+ M apps/web/src/App.tsx
+ D apps/web/src/components/CreateRoomModal.tsx
+ D apps/web/src/components/GameCard.tsx
+ D apps/web/src/components/JoinRoomModal.tsx
+ D apps/web/src/components/RoomList.tsx
+ D apps/web/src/components/RoomLobby.tsx
+ D apps/web/src/discord/DiscordSDK.ts
+ D apps/web/src/hooks/useAuth.ts
+ M apps/web/src/main.tsx
+ D apps/web/src/services/socket.ts
+ D apps/web/src/styles/index.css
+ D apps/web/src/vite-env.d.ts
+ D apps/web/tailwind.config.js
+ D apps/web/tsconfig.json
+ D apps/web/tsconfig.node.json
+ M apps/web/vite.config.ts
+ D docs/DISCORD_ACTIVITY_TROUBLESHOOTING.md
+ D docs/RAILWAY_SETUP.md
+ D docs/STAGE1_COMPLETION.md
+ D nixpacks.toml
+ D package-lock.json
+ M package.json
+ M packages/shared/package.json
+ D packages/shared/src/events/index.ts
+ M packages/shared/src/index.ts
+ D packages/shared/src/types/index.ts
+ D packages/shared/tsconfig.json
+?? .dockerignore
+?? .gitattributes
+?? .github/
+?? .npmrc
+?? apps/server/src/app.test.ts
+?? apps/server/src/app.ts
+?? apps/server/src/config.ts
+?? apps/server/src/games.ts
+?? apps/server/src/persistence.ts
+?? apps/server/src/platform.test.ts
+?? apps/server/src/platform.ts
+?? apps/server/tsup.config.ts
+?? apps/web/config/
+?? apps/web/src/api.ts
+?? apps/web/src/components/Lobby.tsx
+?? apps/web/src/components/PlayerPages.tsx
+?? apps/web/src/platform.css
+?? apps/web/src/store.ts
+?? apps/web/src/styles.css
+?? docs/ARCHITECTURE.md
+?? docs/CONFIGURATION.md
+?? docs/DATABASE.md
+?? docs/DISCORD_SETUP.md
+?? docs/GAME_RULES_PENDING.md
+?? docs/RAILWAY_DEPLOYMENT.md
+?? docs/rebuild/
+?? eslint.config.mjs
+?? games/
+?? packages/database/
+?? packages/discord/
+?? packages/multiplayer/
+?? packages/platform-core/
+?? packages/ui/
+?? playwright.config.ts
+?? pnpm-lock.yaml
+?? pnpm-workspace.yaml
+?? railway.toml
+?? tests/
+?? tooling/
+?? tsconfig.json
+?? vitest.config.ts

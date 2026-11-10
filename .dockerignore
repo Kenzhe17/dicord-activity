@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/generated
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/SECURITY.md
+.git
+.cache
+docs
+tests
+**/*.test.ts
+**/test-results
+**/.artifacts

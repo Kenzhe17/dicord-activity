@@ -1,0 +1,32 @@
+packages:
+  - apps/*
+  - packages/*
+  - games/*
+allowBuilds:
+  '@embedded-postgres/windows-x64': true
+  '@embedded-postgres/linux-x64': true
+  '@embedded-postgres/darwin-arm64': true
+  '@embedded-postgres/darwin-x64': true
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+minimumReleaseAgeExclude:
+  - '@rolldown/binding-android-arm-eabi@1.2.18'
+  - '@rolldown/binding-android-arm64@1.2.18'
+  - '@rolldown/binding-darwin-arm64@1.2.18'
+  - '@rolldown/binding-darwin-x64@1.2.18'
+  - '@rolldown/binding-freebsd-x64@1.2.18'
+  - '@rolldown/binding-linux-arm-gnueabihf@1.2.18'
+  - '@rolldown/binding-linux-arm64-gnu@1.2.18'
+  - '@rolldown/binding-linux-arm64-musl@1.2.18'
+  - '@rolldown/binding-linux-ppc64-gnu@1.2.18'
+  - '@rolldown/binding-linux-s390x-gnu@1.2.18'
+  - '@rolldown/binding-linux-x64-gnu@1.2.18'
+  - '@rolldown/binding-linux-x64-musl@1.2.18'
+  - '@rolldown/binding-openharmony-arm64@1.2.18'
+  - '@rolldown/binding-win32-arm64-msvc@1.2.18'
+  - '@rolldown/binding-win32-x64-msvc@1.2.18'
+  - rolldown@1.2.18
+  - vite@8.3.7
+saveExact: true
+strictPeerDependencies: true

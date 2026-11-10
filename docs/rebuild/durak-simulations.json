@@ -1,0 +1,116 @@
+{
+  "requestedPerCell": 10000,
+  "completed": 100000,
+  "rows": [
+    {
+      "mode": "throw-in",
+      "players": 2,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 297,
+      "actions": 716490,
+      "maxActions": 143,
+      "stalledSeeds": [],
+      "milliseconds": 14539
+    },
+    {
+      "mode": "throw-in",
+      "players": 3,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 228,
+      "actions": 1213517,
+      "maxActions": 270,
+      "stalledSeeds": [],
+      "milliseconds": 33003
+    },
+    {
+      "mode": "throw-in",
+      "players": 4,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 194,
+      "actions": 1196258,
+      "maxActions": 242,
+      "stalledSeeds": [],
+      "milliseconds": 23916
+    },
+    {
+      "mode": "throw-in",
+      "players": 5,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 164,
+      "actions": 1388007,
+      "maxActions": 284,
+      "stalledSeeds": [],
+      "milliseconds": 22664
+    },
+    {
+      "mode": "throw-in",
+      "players": 6,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 184,
+      "actions": 1367345,
+      "maxActions": 282,
+      "stalledSeeds": [],
+      "milliseconds": 21457
+    },
+    {
+      "mode": "transfer",
+      "players": 2,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 269,
+      "actions": 719187,
+      "maxActions": 146,
+      "stalledSeeds": [],
+      "milliseconds": 12167
+    },
+    {
+      "mode": "transfer",
+      "players": 3,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 223,
+      "actions": 1151454,
+      "maxActions": 287,
+      "stalledSeeds": [],
+      "milliseconds": 22163
+    },
+    {
+      "mode": "transfer",
+      "players": 4,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 195,
+      "actions": 1182168,
+      "maxActions": 260,
+      "stalledSeeds": [],
+      "milliseconds": 32914
+    },
+    {
+      "mode": "transfer",
+      "players": 5,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 179,
+      "actions": 1290105,
+      "maxActions": 288,
+      "stalledSeeds": [],
+      "milliseconds": 31309
+    },
+    {
+      "mode": "transfer",
+      "players": 6,
+      "completed": 10000,
+      "attempted": 10000,
+      "draws": 153,
+      "actions": 1335434,
+      "maxActions": 308,
+      "stalledSeeds": [],
+      "milliseconds": 37624
+    }
+  ]
+}

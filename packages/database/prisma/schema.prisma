@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+datasource db {
+  provider = "postgresql"
+  schemas  = ["arcade"]
+}
+model Player {
+  discordId String @id @db.VarChar(40)
+  name String @db.VarChar(80)
+  username String @db.VarChar(80)
+  avatar String?
+  preferences Json @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  participants MatchParticipant[]
+  memberships RoomMember[]
+  sessions AuthSession[]
+  statistics PlayerStatistic[]
+  @@schema("arcade")
+}
+model AuthSession {
+  tokenHash String @id @db.Char(64)
+  playerId String @db.VarChar(40)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  player Player @relation(fields: [playerId], references: [discordId], onDelete: Restrict)
+  @@index([playerId, expiresAt])
+  @@schema("arcade")
+}
+model AuthChallenge {
+  hash String @id @db.Char(64)
+  expiresAt DateTime
+  consumedAt DateTime?
+  @@schema("arcade")
+}
+model RoomSnapshot {
+  id String @id @db.Uuid
+  version Int
+  state Json
+  status String @default("waiting") @db.VarChar(20)
+  inviteHash String? @db.Char(64)
+  inviteExpiresAt DateTime?
+  activeMatchId String? @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastActiveAt DateTime @default(now())
+  members RoomMember[]
+  @@index([status, lastActiveAt])
+  @@schema("arcade")
+}
+model RoomMember {
+  roomId String @db.Uuid
+  playerId String @db.VarChar(40)
+  joinedAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  leftAt DateTime?
+  room RoomSnapshot @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  player Player @relation(fields: [playerId], references: [discordId], onDelete: Restrict)
+  @@id([roomId, playerId])
+  @@index([playerId, leftAt])
+  @@schema("arcade")
+}
+model MatchSnapshot {
+  id String @id @db.Uuid
+  roomId String @db.Uuid
+  gameId String @db.VarChar(40)
+  stateVersion Int
+  version Int
+  seed Int
+  state Json
+  result Json?
+  status String @db.VarChar(20)
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+  actions MatchAction[]
+  participants MatchParticipant[]
+  @@index([status, createdAt])
+  @@schema("arcade")
+}
+model MatchAction {
+  matchId String @db.Uuid
+  sequence Int
+  requestId String @db.Uuid
+  actorId String @db.VarChar(40)
+  payload Json
+  occurredAt DateTime
+  match MatchSnapshot @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  @@id([matchId, sequence])
+  @@unique([matchId, requestId])
+  @@schema("arcade")
+}
+model MatchParticipant {
+  matchId String @db.Uuid
+  playerId String @db.VarChar(40)
+  outcome String? @db.VarChar(20)
+  ratingDelta Int?
+  match MatchSnapshot @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  player Player @relation(fields: [playerId], references: [discordId], onDelete: Restrict)
+  @@id([matchId, playerId])
+  @@index([playerId, matchId])
+  @@schema("arcade")
+}
+model PlayerStatistic {
+  playerId String @db.VarChar(40)
+  gameId String @db.VarChar(40)
+  played Int @default(0)
+  wins Int @default(0)
+  losses Int @default(0)
+  draws Int @default(0)
+  rating Int @default(1000)
+  player Player @relation(fields: [playerId], references: [discordId], onDelete: Restrict)
+  @@id([playerId, gameId])
+  @@index([gameId, rating])
+  @@schema("arcade")
+}
+model RecoveryEvent {
+  id String @id @db.Uuid
+  playerId String? @db.VarChar(40)
+  roomId String? @db.Uuid
+  matchId String? @db.Uuid
+  kind String @db.VarChar(40)
+  occurredAt DateTime @default(now())
+  @@index([roomId, occurredAt])
+  @@schema("arcade")
+}
+model RequestReceipt {
+  actorId String @db.VarChar(40)
+  requestId String @db.Uuid
+  fingerprint String @db.Char(64)
+  resourceId String @db.Uuid
+  createdAt DateTime @default(now())
+  @@id([actorId, requestId])
+  @@schema("arcade")
+}
+model EconomyOperation {
+  id String @id @db.Uuid
+  idempotencyKey String @unique @db.VarChar(120)
+  playerId String @db.VarChar(40)
+  matchId String @db.Uuid
+  kind String @db.VarChar(40)
+  status String @db.VarChar(20)
+  externalReference String?
+  createdAt DateTime @default(now())
+  @@index([playerId, createdAt])
+  @@schema("arcade")
+}

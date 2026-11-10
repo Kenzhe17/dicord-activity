@@ -1,0 +1,22 @@
+{
+  "name": "@rize/database",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "validate": "prisma validate",
+    "generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.8.0",
+    "@prisma/client": "7.8.0",
+    "@rize/shared": "workspace:*",
+    "pg": "8.23.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "prisma": "7.8.0"
+  }
+}

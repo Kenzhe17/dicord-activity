@@ -1,0 +1,15 @@
+title = "r!z3 Arcade publication scan"
+
+[extend]
+useDefault = true
+
+# Public, synthetic OAuth fixture ID. No tokens, secrets or entire test files
+# are excluded; both the exact path and exact extracted value must match.
+[[rules]]
+id = "discord-client-id"
+[[rules.allowlists]]
+description = "Synthetic Discord application ID used by the injected OAuth test"
+condition = "AND"
+paths = ['''^apps/server/src/platform\.test\.ts$''']
+regexTarget = "secret"
+regexes = ['''^123456789012345678$''']

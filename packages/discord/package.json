@@ -1,0 +1,15 @@
+{
+  "name": "@rize/discord",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./client": "./src/client.ts"
+  },
+  "dependencies": {
+    "@rize/shared": "workspace:*",
+    "@discord/embedded-app-sdk": "2.5.0",
+    "zod": "^4.1.12"
+  }
+}
