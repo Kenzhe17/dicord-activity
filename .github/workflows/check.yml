@@ -42,6 +42,11 @@ jobs:
       - run: pnpm test:durak:sim
       - run: node tooling/smoke-built.mjs
       - run: node tooling/restart-smoke.mjs
+      - name: Prefer Azure Ubuntu mirror for apt
+        run: |
+          if ! curl -fsSI --max-time 10 http://archive.ubuntu.com/ubuntu/dists/noble/Release >/dev/null; then
+            sudo sed -i 's|http://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g; s|http://security.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources || true
+          fi
       - name: Install Playwright chromium (with apt retry)
         timeout-minutes: 25
         run: |
