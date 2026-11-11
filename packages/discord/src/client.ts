@@ -7,11 +7,14 @@ export interface ActivityContext {
 interface Participant { id: string; username: string; global_name?: string | null | undefined; avatar?: string | null | undefined }
 export interface ActivitySdk {
   instanceId: string; guildId: string | null; channelId: string | null; platform: string;
+  customId: string | null;
   ready(): Promise<void>;
   commands: {
     authorize(input: { client_id: string; response_type: 'code'; state: string; prompt: 'none'; scope: ['identify'] }): Promise<{ code: string }>;
     authenticate(input: { access_token: string }): Promise<{ user: { id: string } }>;
     getInstanceConnectedParticipants(): Promise<{ participants: Participant[] }>;
+    shareLink(input: { message: string; custom_id?: string }): Promise<{ success: boolean; didCopyLink: boolean; didSendMessage: boolean }>;
+    openInviteDialog(): Promise<unknown>;
   };
   subscribe(event: 'ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE', listener: (data: { participants: Participant[] }) => void): Promise<unknown>;
   unsubscribe(event: 'ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE', listener: (data: { participants: Participant[] }) => void): Promise<unknown>;
@@ -55,6 +58,13 @@ export class ActivityClient {
       await timeout(subscription, 4000);
     } catch { await this.dispose(); onContext(context); }
     return { token: session.token, expiresAt: session.expiresAt, player: session.player };
+  }
+  get customId(): string | null { return this.sdk.customId ?? null; }
+  async shareLink(input: { message: string; custom_id?: string }): Promise<{ success: boolean; didCopyLink: boolean; didSendMessage: boolean }> {
+    return timeout(this.sdk.commands.shareLink(input));
+  }
+  async openInviteDialog(): Promise<unknown> {
+    return timeout(this.sdk.commands.openInviteDialog());
   }
   async dispose(): Promise<void> {
     this.generation++;

@@ -1,19 +1,44 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ArrowLeft, Copy, Lock, Users } from 'lucide-react';
 import { Panel, Button } from '@rize/ui';
 import type { GameInfo, RoomView, MatchView } from '@rize/shared';
 import { useArcade } from '../store';
 import { api, post, avatarSource, ApiError } from '../api';
 import { DurakTable } from './DurakTable';
-export function Lobby({ games, run, busy, onLeft }: { games: GameInfo[]; run: (action: () => Promise<void>) => Promise<void>; busy: boolean; onLeft: () => void }) {
+export interface DiscordInviteActions { share: (code: string) => Promise<string>; channel: () => Promise<string> }
+export function Lobby({ games, run, busy, onLeft, discordInvite }: { games: GameInfo[]; run: (action: () => Promise<void>) => Promise<void>; busy: boolean; onLeft: () => void; discordInvite?: DiscordInviteActions | undefined }) {
   const { session, room, match, setRoom, setMatch } = useArcade();
   const [invite, setInvite] = useState('');
+  const [notice, setNotice] = useState('');
+  const codeRef = useRef<HTMLInputElement>(null);
   if (!session || !room) return null;
   const game = games.find(g => g.id === room.gameId);
   const host = room.hostId === session.player.id;
   const ready = room.members.find(m => m.player.id === session.player.id)?.ready ?? false;
   const sandbox = match?.gameId === 'sandbox' ? match.state as { scores: Record<string, number>; turnId: string | null; winner: string | null; target: number } : null;
   async function refresh() { setRoom(await api('/rooms/' + room!.id)); }
+  function selectCode() {
+    const field = codeRef.current;
+    if (!field) return;
+    field.focus(); field.select();
+    setNotice('Код выделен — скопируйте его вручную (Ctrl+C)');
+  }
+  async function copyInvite() {
+    setNotice('');
+    try {
+      await navigator.clipboard.writeText(invite);
+      setNotice('Скопировано!');
+      return;
+    } catch { /* Clipboard API unavailable or denied — try selection fallback. */ }
+    const field = codeRef.current;
+    if (field) { field.focus(); field.select(); }
+    try {
+      if (field && document.execCommand('copy')) setNotice('Скопировано!');
+      else setNotice('Не удалось скопировать автоматически — код выделен, нажмите Ctrl+C');
+    } catch {
+      setNotice('Буфер обмена недоступен — код выделен, скопируйте его вручную (Ctrl+C)');
+    }
+  }
   async function toggleReady() {
     const desired = !ready;
     let current = room!;
@@ -41,7 +66,7 @@ export function Lobby({ games, run, busy, onLeft }: { games: GameInfo[]; run: (a
       {room.phase !== 'playing' && <div className="button-row"><Button disabled={busy} onClick={() => void run(toggleReady)}>{ready ? 'Отменить готовность' : 'Я готов'}</Button>{host && game?.status === 'ready' && <Button disabled={busy || room.members.length < game.minPlayers || room.members.some(m => !m.ready)} onClick={() => void run(async () => { setMatch(await post<MatchView>('/rooms/' + room.id + '/start', { requestId: crypto.randomUUID() })); await refresh(); })}>Начать партию</Button>}</div>}
       {game?.status === 'planned' && <p className="foundation-note">Игра «Скоро»: лобби доступно, запуск партии появится после реализации и проверки движка.</p>}
     </Panel>
-    <Panel><h2><Lock size={16}/> Приглашение</h2><p className="muted">{host ? 'Создайте приглашение на 24 часа. Новое приглашение отменяет предыдущее.' : 'Попросите хоста выдать приглашение друзьям.'}</p>{host && <Button disabled={busy} onClick={() => void run(async () => setInvite((await post<{ code: string }>('/rooms/' + room.id + '/invite')).code))}>Создать приглашение</Button>}{invite && <div className="invite-box"><code className="invite-code">{invite}</code><Button onClick={() => void run(async () => { await navigator.clipboard.writeText(invite); })}><Copy size={14}/> Копировать</Button></div>}</Panel>
+    <Panel><h2><Lock size={16}/> Приглашение</h2><p className="muted">{host ? 'Создайте приглашение на 24 часа. Новое приглашение отменяет предыдущее.' : 'Попросите хоста выдать приглашение друзьям.'}</p>{host && <Button disabled={busy} onClick={() => void run(async () => { setNotice(''); setInvite((await post<{ code: string }>('/rooms/' + room.id + '/invite')).code); })}>Создать приглашение</Button>}{invite && <div className="invite-panel"><input ref={codeRef} className="invite-code" readOnly value={invite} onFocus={event => event.currentTarget.select()} aria-label="Код приглашения"/><div className="invite-actions"><Button onClick={() => void copyInvite()}><Copy size={14}/> Копировать код</Button><Button onClick={selectCode}>Выделить код</Button>{discordInvite && <Button disabled={busy} onClick={() => void run(async () => setNotice(await discordInvite.share(invite)))}>Пригласить в Discord</Button>}{discordInvite && <Button disabled={busy} onClick={() => void run(async () => setNotice(await discordInvite.channel()))}>В текущий канал</Button>}</div></div>}{notice && <p className="invite-notice" role="status">{notice}</p>}</Panel>
     {host && <button className="danger-button" disabled={busy || room.phase === 'playing'} onClick={() => void run(async () => { await api('/rooms/' + room.id, { method: 'DELETE' }); setRoom(null); setMatch(null); onLeft(); })}>Закрыть комнату</button>}
     </details>
   </section>;

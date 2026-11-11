@@ -67,13 +67,40 @@ export function App() {
     );
     setSession(value); await restore();
   }
+  const applyShareInvite = useCallback(async () => {
+    const code = activity.current?.customId;
+    if (!code) return;
+    const match = /^([0-9a-fA-F-]{36}):([A-Za-z0-9_-]{16,})$/.exec(code);
+    if (!match) return;
+    try {
+      const joined = await post<RoomView>('/rooms/' + match[1] + '/join', { inviteToken: match[2] });
+      setRoom(joined); setMatch(null); navigate('room');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Приглашение недействительно');
+    }
+  }, [navigate, setRoom, setMatch]);
+  const shareRoomInvite = useCallback(async (code: string): Promise<string> => {
+    const client = activity.current;
+    if (!client) throw new Error('Discord Activity недоступна');
+    const result = await client.shareLink({ message: 'Заходи в r!z3 Arcade — я создал комнату, присоединяйся!', custom_id: code });
+    if (!result.success) return 'Отправка отменена';
+    if (result.didSendMessage) return 'Приглашение отправлено';
+    if (result.didCopyLink) return 'Ссылка на Activity скопирована — отправьте её друзьям';
+    return 'Приглашение готово';
+  }, []);
+  const channelInvite = useCallback(async (): Promise<string> => {
+    const client = activity.current;
+    if (!client) throw new Error('Discord Activity недоступна');
+    await client.openInviteDialog();
+    return 'Открыт диалог приглашения Discord';
+  }, []);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
     void run(async () => {
       const [list, settings] = await Promise.all([api<GameInfo[]>('/games'), api<PublicConfig>('/config')]);
       setGames(list); setConfig(settings);
-      if (settings.authMode === 'discord' && new URLSearchParams(location.search).has('frame_id')) await discordLogin(settings);
+      if (settings.authMode === 'discord' && new URLSearchParams(location.search).has('frame_id')) { await discordLogin(settings); await applyShareInvite(); }
       else if (storedToken()) await restore();
     });
   }, []);
@@ -116,7 +143,7 @@ export function App() {
       {error && <div role="alert" className="error">{error}<button aria-label="Закрыть сообщение" onClick={() => setError('')}>×</button></div>}
       {context && <div className="activity-strip"><Users size={14}/><span>{context.participantsAvailable ? 'В Activity: ' + context.participants.map(p => p.name).join(', ') : 'Activity подключена · список участников недоступен в этом клиенте'}</span></div>}
       {!session && page !== 'terms' && page !== 'privacy' && <Panel className="login-panel"><div><h2>Займите своё место</h2><p className="muted">{config?.authMode === 'mock' ? 'Локальный режим разработки — без доступа к Discord и экономике.' : 'Войдите через Discord, чтобы присоединиться к компании.'}</p></div><form onSubmit={event => { event.preventDefault(); void login(); }}>{config?.authMode === 'mock' && <input aria-label="Имя игрока" value={name} maxLength={40} onChange={event => setName(event.target.value)}/>}<Button type="submit" disabled={busy || !config || config.authMode === 'disabled'}>{busy ? 'Подключаем…' : config?.authMode === 'mock' ? 'Войти локально' : 'Войти через Discord'}</Button></form></Panel>}
-      {page === 'room' && room ? <Lobby games={games} run={run} busy={busy} onLeft={() => navigate('rooms')}/> : page === 'home' || page === 'games' ? <>
+      {page === 'room' && room ? <Lobby games={games} run={run} busy={busy} onLeft={() => navigate('rooms')} discordInvite={config?.authMode === 'discord' && session ? { share: shareRoomInvite, channel: channelInvite } : undefined}/> : page === 'home' || page === 'games' ? <>
         {page === 'home' && <section className="hero"><p className="eyebrow">R!Z3 ARCADE / СВОИ ЛЮДИ, ХОРОШИЕ ИГРЫ</p><h1>Встречаемся<br/><span>за игровым столом.</span></h1><p className="subtitle">Любимые игры. Знакомые голоса.<br/>Один клуб внутри Discord.</p><div className="button-row"><Button onClick={() => navigate('games')}>Выбрать игру <ArrowUpRight size={15}/></Button><button className="text-button" onClick={() => navigate('rooms')}>Найти компанию</button></div><div className="hero-art" aria-hidden="true"><div className="art-card card-back"/><div className="art-card card-front"><Spade size={64}/><span>r!z3</span></div><span className="art-orbit"/></div></section>}
         {library}
         {page === 'home' && <div className="club-note"><span>01 / ВЫБЕРИТЕ ИГРУ</span><span>02 / СОБЕРИТЕ СВОИХ</span><span>03 / ЗАЙМИТЕ МЕСТА</span></div>}

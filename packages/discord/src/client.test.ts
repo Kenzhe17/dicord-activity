@@ -4,12 +4,14 @@ import type { ActivitySdk, ActivityContext } from './client';
 const player = { id: '123456789012345678', name: 'Verified', avatar: null };
 function fixture() {
   const sdk: ActivitySdk = {
-    instanceId: 'instance', guildId: 'guild', channelId: 'channel', platform: 'desktop',
+    instanceId: 'instance', guildId: 'guild', channelId: 'channel', platform: 'desktop', customId: null,
     ready: vi.fn(async () => {}),
     commands: {
       authorize: vi.fn(async () => ({ code: 'test-code' })),
       authenticate: vi.fn(async () => ({ user: { id: player.id } })),
       getInstanceConnectedParticipants: vi.fn(async () => ({ participants: [{ id: player.id, username: 'Participant' }] })),
+      shareLink: vi.fn(async () => ({ success: true, didCopyLink: false, didSendMessage: true })),
+      openInviteDialog: vi.fn(async () => ({})),
     },
     subscribe: vi.fn(async () => {}), unsubscribe: vi.fn(async () => {}),
   };
