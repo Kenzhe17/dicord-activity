@@ -7,110 +7,110 @@
       "players": 2,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 297,
-      "actions": 716490,
-      "maxActions": 143,
+      "draws": 35,
+      "actions": 296306,
+      "maxActions": 129,
       "stalledSeeds": [],
-      "milliseconds": 14016
+      "milliseconds": 2634
     },
     {
       "mode": "throw-in",
       "players": 3,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 228,
-      "actions": 1213517,
-      "maxActions": 270,
+      "draws": 8,
+      "actions": 535125,
+      "maxActions": 181,
       "stalledSeeds": [],
-      "milliseconds": 20318
+      "milliseconds": 5793
     },
     {
       "mode": "throw-in",
       "players": 4,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 194,
-      "actions": 1196258,
-      "maxActions": 242,
+      "draws": 9,
+      "actions": 671353,
+      "maxActions": 180,
       "stalledSeeds": [],
-      "milliseconds": 18923
+      "milliseconds": 5463
     },
     {
       "mode": "throw-in",
       "players": 5,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 164,
-      "actions": 1388007,
-      "maxActions": 284,
+      "draws": 6,
+      "actions": 746146,
+      "maxActions": 223,
       "stalledSeeds": [],
-      "milliseconds": 23337
+      "milliseconds": 6037
     },
     {
       "mode": "throw-in",
       "players": 6,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 184,
-      "actions": 1367345,
-      "maxActions": 282,
+      "draws": 3,
+      "actions": 809027,
+      "maxActions": 199,
       "stalledSeeds": [],
-      "milliseconds": 29726
+      "milliseconds": 5801
     },
     {
       "mode": "transfer",
       "players": 2,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 269,
-      "actions": 719187,
-      "maxActions": 146,
+      "draws": 38,
+      "actions": 290425,
+      "maxActions": 120,
       "stalledSeeds": [],
-      "milliseconds": 15209
+      "milliseconds": 2481
     },
     {
       "mode": "transfer",
       "players": 3,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 223,
-      "actions": 1151454,
-      "maxActions": 287,
+      "draws": 8,
+      "actions": 528330,
+      "maxActions": 181,
       "stalledSeeds": [],
-      "milliseconds": 31350
+      "milliseconds": 5947
     },
     {
       "mode": "transfer",
       "players": 4,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 195,
-      "actions": 1182168,
-      "maxActions": 260,
+      "draws": 7,
+      "actions": 659973,
+      "maxActions": 185,
       "stalledSeeds": [],
-      "milliseconds": 37162
+      "milliseconds": 6704
     },
     {
       "mode": "transfer",
       "players": 5,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 179,
-      "actions": 1290105,
-      "maxActions": 288,
+      "draws": 4,
+      "actions": 730723,
+      "maxActions": 191,
       "stalledSeeds": [],
-      "milliseconds": 39939
+      "milliseconds": 6521
     },
     {
       "mode": "transfer",
       "players": 6,
       "completed": 10000,
       "attempted": 10000,
-      "draws": 153,
-      "actions": 1335434,
-      "maxActions": 308,
+      "draws": 2,
+      "actions": 780915,
+      "maxActions": 205,
       "stalledSeeds": [],
-      "milliseconds": 35918
+      "milliseconds": 6957
     }
   ]
 }
