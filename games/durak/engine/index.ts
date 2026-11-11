@@ -11,6 +11,7 @@ export const actionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('transfer'), cards }).strict(),
   z.object({ type: z.literal('defend'), card, target: card }).strict(),
   z.object({ type: z.literal('take') }).strict(), z.object({ type: z.literal('pass') }).strict(),
+  z.object({ type: z.literal('surrender') }).strict(),
 ]);
 export type DurakAction = z.infer<typeof actionSchema>;
 export const stateSchema = z.object({
@@ -18,11 +19,11 @@ export const stateSchema = z.object({
   hands: z.array(z.array(card)), deck: z.array(card), discard: z.array(card),
   table: z.array(z.object({ attack: card, defense: card.nullable() })),
   trump: z.number().int().min(0).max(3), trumpCard: card, dealer: z.number().int(),
-  active: z.array(z.number().int()), original: z.number().int(), lead: z.number().int(), defender: z.number().int(), actor: z.number().int(),
+  active: z.array(z.number().int()), forfeited: z.array(z.number().int()).default([]), original: z.number().int(), lead: z.number().int(), defender: z.number().int(), actor: z.number().int(),
   queue: z.array(z.number().int()), limit: z.number().int().min(0).max(6), bout: z.number().int().positive(),
   phase: z.enum(['opening', 'defending', 'throwing', 'taking', 'finished']),
   deadline: z.number().finite().nonnegative(), pausedRemaining: z.number().min(0).max(30000).nullable(),
-  lastEvent: z.enum(['deal', 'attack', 'defend', 'transfer', 'throw', 'take', 'pass', 'discard', 'pickup', 'pause', 'resume']),
+  lastEvent: z.enum(['deal', 'attack', 'defend', 'transfer', 'throw', 'take', 'pass', 'discard', 'pickup', 'pause', 'resume', 'surrender']),
 });
 export type DurakState = z.infer<typeof stateSchema>;
 const hand = (s: DurakState, seat: number) => s.hands[seat]!;
@@ -31,7 +32,7 @@ const nextSeat = (s: DurakState, from: number) => {
   throw new Error('No active player');
 };
 const circle = (s: DurakState, start: number) => Array.from({ length: s.players.length }, (_, i) => (start + i) % s.players.length).filter(i => s.active.includes(i));
-const copy = (s: DurakState): DurakState => ({ ...s, players: [...s.players], hands: s.hands.map(h => [...h]), deck: [...s.deck], discard: [...s.discard], table: s.table.map(p => ({ ...p })), active: [...s.active], queue: [...s.queue] });
+const copy = (s: DurakState): DurakState => ({ ...s, players: [...s.players], hands: s.hands.map(h => [...h]), deck: [...s.deck], discard: [...s.discard], table: s.table.map(p => ({ ...p })), active: [...s.active], forfeited: [...s.forfeited], queue: [...s.queue] });
 
 export function assertInvariants(s: DurakState): void {
   const all = [...s.deck, ...s.discard, ...s.hands.flat(), ...s.table.flatMap(p => p.defense === null ? [p.attack] : [p.attack, p.defense])];
@@ -39,6 +40,7 @@ export function assertInvariants(s: DurakState): void {
   if (s.hands.length !== s.players.length || new Set(s.players).size !== s.players.length || new Set(s.active).size !== s.active.length) throw new Error('Invalid seats');
   if (s.table.length > s.limit || s.table.some(p => p.defense !== null && !beats(p.attack, p.defense, s.trump))) throw new Error('Invalid table');
   if (s.active.some(i => i < 0 || i >= s.players.length) || s.hands.some((h, i) => !s.active.includes(i) && h.length > 0)) throw new Error('Invalid active players');
+  if (new Set(s.forfeited).size !== s.forfeited.length || s.forfeited.some(i => i < 0 || i >= s.players.length || s.active.includes(i))) throw new Error('Invalid forfeited seats');
   if (s.phase !== 'finished') {
     if (s.active.length < 2 || !s.active.includes(s.actor) || !s.active.includes(s.defender)) throw new Error('Invalid turn');
     if (!s.active.includes(s.original) || !s.active.includes(s.lead)) throw new Error('Invalid attacking seats');
@@ -46,7 +48,7 @@ export function assertInvariants(s: DurakState): void {
     if ((s.phase === 'throwing' || s.phase === 'taking') && (s.queue[0] !== s.actor || new Set(s.queue).size !== s.queue.length || s.queue.some(i => !s.active.includes(i) || i === s.defender || !hand(s, i).length))) throw new Error('Invalid throwing queue');
     if ((s.phase === 'defending') !== (s.actor === s.defender)) throw new Error('Invalid defender turn');
     if (s.phase === 'opening' && s.table.length || s.phase === 'defending' && !s.table.some(p => p.defense === null) || s.phase === 'throwing' && s.table.some(p => p.defense === null)) throw new Error('Invalid phase');
-  } else if (s.active.length > 1 || s.table.length || s.deck.length) throw new Error('Invalid final state');
+  } else if (s.active.length > 1 || s.table.length || (s.deck.length && !s.forfeited.length)) throw new Error('Invalid final state');
 }
 
 export function createState(raw: unknown, context: GameContext): DurakState {
@@ -62,13 +64,17 @@ export function createState(raw: unknown, context: GameContext): DurakState {
   let first = (dealer + 1) % n, lowest = 9;
   hands.forEach((h, i) => h.forEach(c => { if (suit(c) === trump && rank(c) < lowest) { first = i; lowest = rank(c); } }));
   const defender = (first + 1) % n;
-  const state: DurakState = { players: [...context.players], mode: settings.mode, hands, deck, discard: [], table: [], trump, trumpCard, dealer, active: hands.map((_, i) => i), original: first, lead: first, defender, actor: first, queue: [], limit: 6, bout: 1, phase: 'opening', deadline: context.startedAt + 30000, pausedRemaining: null, lastEvent: 'deal' };
+  const state: DurakState = { players: [...context.players], mode: settings.mode, hands, deck, discard: [], table: [], trump, trumpCard, dealer, active: hands.map((_, i) => i), forfeited: [], original: first, lead: first, defender, actor: first, queue: [], limit: 6, bout: 1, phase: 'opening', deadline: context.startedAt + 30000, pausedRemaining: null, lastEvent: 'deal' };
   assertInvariants(state); return state;
 }
 
 export function invalidReason(s: DurakState, action: DurakAction, actorId: string, now: number): string | null {
   if (!Number.isFinite(now) || now < 0) return 'Некорректное время';
   if (s.phase === 'finished') return 'Партия завершена';
+  if (action.type === 'surrender') {
+    const seat = s.players.indexOf(actorId);
+    return seat >= 0 && s.active.includes(seat) ? null : 'Вы уже не участвуете в партии';
+  }
   if (s.players[s.actor] !== actorId) return 'Сейчас ход другого игрока';
   if (s.pausedRemaining !== null) return 'Партия приостановлена';
   if (now >= s.deadline) return 'Время хода истекло';
@@ -100,13 +106,31 @@ function settle(s: DurakState, taking: boolean) {
   const tableCards = s.table.flatMap(p => p.defense === null ? [p.attack] : [p.attack, p.defense]);
   (taking ? hand(s, s.defender) : s.discard).push(...tableCards);
   s.table = []; s.queue = []; s.lastEvent = taking ? 'pickup' : 'discard';
-  const refill = [...circle(s, s.original).filter(i => i !== s.defender), s.defender];
+  const refill = [...circle(s, s.original).filter(i => i !== s.defender && s.active.includes(i)), ...(s.active.includes(s.defender) ? [s.defender] : [])];
   for (const seat of refill) while (hand(s, seat).length < 6 && s.deck.length) hand(s, seat).push(s.deck.shift()!);
   if (!s.deck.length) s.active = s.active.filter(i => hand(s, i).length > 0);
   if (s.active.length <= 1) { s.phase = 'finished'; s.actor = -1; s.deadline = 0; return; }
   const first = !taking && s.active.includes(s.defender) ? s.defender : nextSeat(s, s.defender);
   s.original = first; s.lead = first; s.actor = first; s.defender = nextSeat(s, first);
   s.limit = Math.min(6, hand(s, s.defender).length); s.phase = 'opening'; s.bout++;
+}
+/** Explicit forfeit: hand and any table cards go to the discard, the seat leaves
+ * the rotation and can never return to this match. With two or fewer seats left
+ * the match ends immediately — forfeited seats are always losers, never winners.
+ * Otherwise the current bout is voided exactly like a fully defended settle. */
+function forfeit(s: DurakState, seat: number) {
+  s.forfeited.push(seat);
+  s.discard.push(...hand(s, seat)); s.hands[seat] = [];
+  s.active = s.active.filter(i => i !== seat);
+  s.queue = s.queue.filter(i => i !== seat);
+  s.lastEvent = 'surrender';
+  if (s.active.length <= 1) {
+    s.table.forEach(p => { s.discard.push(p.attack); if (p.defense !== null) s.discard.push(p.defense); });
+    s.table = [];
+    s.hands.forEach((h, i) => { if (h.length) { s.discard.push(...h); s.hands[i] = []; } });
+    s.queue = []; s.active = []; s.phase = 'finished'; s.actor = -1; s.deadline = 0; return;
+  }
+  settle(s, false);
 }
 function offer(s: DurakState, taking: boolean) {
   if (s.table.length >= s.limit) { settle(s, taking); return; }
@@ -119,6 +143,7 @@ export function transition(s: DurakState, raw: DurakAction, actorId: string, now
   if (reason) throw new Error(reason);
   const next = copy(s), action = raw;
   next.lastEvent = action.type;
+  if (action.type === 'surrender') { forfeit(next, s.players.indexOf(actorId)); assertInvariants(next); return next; }
   if ('cards' in action) {
     next.hands[next.actor] = hand(next, next.actor).filter(c => !action.cards.includes(c));
     next.table.push(...action.cards.map(attack => ({ attack, defense: null })));
@@ -158,12 +183,15 @@ export function legalActions(s: DurakState, playerId: string): DurakAction[] {
 }
 export function result(s: DurakState): GameResult | null {
   if (s.phase !== 'finished') return null;
-  return s.active.length ? { winners: s.players.filter((_, i) => !s.active.includes(i)), losers: [s.players[s.active[0]!]!], draw: false } : { winners: [], losers: [], draw: true };
+  const losers = new Set(s.forfeited.map(i => s.players[i]!));
+  if (s.active.length === 1) losers.add(s.players[s.active[0]!]!);
+  if (!losers.size) return { winners: [], losers: [], draw: true };
+  return { winners: s.players.filter(id => !losers.has(id)), losers: [...losers], draw: false };
 }
 export function playerView(s: DurakState, playerId: string) {
   const seat = s.players.indexOf(playerId);
   if (seat < 0) throw new Error('Not a participant');
-  return { hand: [...hand(s, seat)], players: s.players.map((id, i) => ({ id, count: hand(s, i).length, out: !s.active.includes(i) })), table: s.table.map(p => ({ ...p })), trump: s.trump, trumpCard: s.trumpCard, deckCount: s.deck.length, discardCount: s.discard.length, actorId: s.players[s.actor] ?? null, defenderId: s.players[s.defender]!, phase: s.phase, mode: s.mode, limit: s.limit, bout: s.bout, deadline: s.deadline, paused: s.pausedRemaining !== null, lastEvent: s.lastEvent, legalActions: legalActions(s, playerId), result: result(s) };
+  return { hand: [...hand(s, seat)], players: s.players.map((id, i) => ({ id, count: hand(s, i).length, out: !s.active.includes(i), forfeited: s.forfeited.includes(i) })), table: s.table.map(p => ({ ...p })), trump: s.trump, trumpCard: s.trumpCard, deckCount: s.deck.length, discardCount: s.discard.length, actorId: s.players[s.actor] ?? null, defenderId: s.players[s.defender]!, phase: s.phase, mode: s.mode, limit: s.limit, bout: s.bout, deadline: s.deadline, paused: s.pausedRemaining !== null, lastEvent: s.lastEvent, forfeited: s.forfeited.includes(seat), canSurrender: s.phase !== 'finished' && s.active.includes(seat), legalActions: legalActions(s, playerId), result: result(s) };
 }
 export type DurakView = ReturnType<typeof playerView>;
 

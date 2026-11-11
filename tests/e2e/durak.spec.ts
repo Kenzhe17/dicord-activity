@@ -109,7 +109,7 @@ test('complete Durak: personal cards, defense, pickup, discard, reconnect and re
       await expect(page.locator('.durak-game')).toHaveAttribute('data-match-version', String(view.version));
       if ('cards' in action) for (const c of action.cards) await page.locator('[data-hand-card="' + c + '"]').click();
       if (action.type === 'defend') { await page.locator('[data-hand-card="' + action.card + '"]').click(); await page.locator('[data-target-card="' + action.target + '"]').click(); defended = true; }
-      const label = { attack: 'Атаковать', defend: 'Защититься', transfer: 'Перевести', throw: 'Подкинуть', take: 'Взять', pass: state.phase === 'taking' ? 'Не подкидывать' : 'Бито / не подкидываю' }[action.type];
+      const label = { attack: 'Атаковать', defend: 'Защититься', transfer: 'Перевести', throw: 'Подкинуть', take: 'Взять', pass: state.phase === 'taking' ? 'Не подкидывать' : 'Бито / не подкидываю', surrender: 'Сдаться' }[action.type];
       await page.getByRole('button', { name: label, exact: true }).click();
       const prior = view.version;
       await expect.poll(() => received.get(page)?.version ?? -1).toBeGreaterThan(prior);

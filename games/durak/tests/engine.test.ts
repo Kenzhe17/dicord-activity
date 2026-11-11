@@ -112,6 +112,57 @@ describe('Durak rules', () => {
     let s = fixture([[0], [9]]); s = move(s, { type: 'attack', cards: [0] }); s = move(s, { type: 'take' });
     expect(result(s)?.losers).toEqual(['p1']); expect(s.hands[1]).toContain(0);
   });
+  it('surrender ends a two-player match with the forfeiter as the sole loser', () => {
+    let s = fixture([[0, 4, 5], [9, 3, 6]]);
+    s = move(s, { type: 'attack', cards: [0] });
+    s = transition(s, { type: 'surrender' }, 'p1', 2);
+    expect(s.phase).toBe('finished'); expect(s.forfeited).toEqual([1]); expect(s.active).toEqual([]);
+    expect(result(s)).toEqual({ winners: ['p0'], losers: ['p1'], draw: false });
+    assertInvariants(s);
+    expect(() => transition(s, { type: 'surrender' }, 'p0', 3)).toThrow('завершена');
+  });
+  it('surrender off-turn removes the seat, discards the hand and continues the bout voided', () => {
+    let s = fixture([[0, 9, 7], [1, 3, 6], [10, 18, 4]]);
+    s = move(s, { type: 'attack', cards: [0] });
+    s = transition(s, { type: 'surrender' }, 'p1', 2);
+    expect(s.forfeited).toEqual([1]); expect(s.active).toEqual([0, 2]); expect(s.hands[1]).toEqual([]);
+    expect(s.table).toHaveLength(0); expect(s.discard).toContain(0);
+    expect(s.actor).toBe(2); expect(s.phase).toBe('opening'); assertInvariants(s);
+    s = transition(s, { type: 'surrender' }, 'p2', 3);
+    expect(s.phase).toBe('finished');
+    expect(result(s)!.losers).toEqual(expect.arrayContaining(['p1', 'p2']));
+    expect(result(s)!.winners).toEqual(['p0']); expect(result(s)!.draw).toBe(false);
+    assertInvariants(s);
+  });
+  it('surrender by the defender mid-defense voids the bout toward the next seat', () => {
+    let s = fixture([[0, 9, 7], [1, 3, 6], [10, 18, 4]]);
+    s = move(s, { type: 'attack', cards: [0] });
+    s = transition(s, { type: 'surrender' }, 'p1', 2);
+    expect(s.actor).toBe(2); expect(s.defender).toBe(0); expect(s.table).toHaveLength(0);
+    expect(s.discard).toContain(0); assertInvariants(s);
+  });
+  it('rejects surrender for outsiders, eliminated players and repeated forfeits', () => {
+    let s = fixture([[0, 9, 7], [1, 3, 6], [10, 18, 4]]);
+    expect(() => transition(s, { type: 'surrender' }, 'stranger', 1)).toThrow('не участвуете');
+    s = transition(s, { type: 'surrender' }, 'p2', 1);
+    expect(() => transition(s, { type: 'surrender' }, 'p2', 2)).toThrow('не участвуете');
+    const view = playerView(s, 'p2');
+    expect(view.forfeited).toBe(true); expect(view.canSurrender).toBe(false);
+    const alive = playerView(s, 'p0');
+    expect(alive.forfeited).toBe(false); expect(alive.canSurrender).toBe(true);
+    assertInvariants(s);
+  });
+  it('keeps forfeits through serialization and counts them as losers at a natural finish', () => {
+    let s = fixture([[0], [1], [5, 6]]);
+    s = transition(s, { type: 'surrender' }, 'p2', 1);
+    s = stateSchema.parse(JSON.parse(JSON.stringify(s)));
+    expect(s.forfeited).toEqual([2]);
+    expect(s.actor).toBe(1);
+    s = move(s, { type: 'attack', cards: [1] }); s = move(s, { type: 'take' });
+    expect(s.phase).toBe('finished');
+    expect(result(s)).toEqual({ winners: ['p1'], losers: expect.arrayContaining(['p0', 'p2']), draw: false });
+    assertInvariants(s);
+  });
   it('restores timing, pauses all-absent play and never awards a technical defeat', () => {
     const initial = createState({}, { players: ['a', 'b'], seed: 82, startedAt: 0 });
     let s = applySystem(initial, { type: 'pause' }, 10000); expect(s.pausedRemaining).toBe(20000);

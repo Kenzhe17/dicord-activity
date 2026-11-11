@@ -78,7 +78,24 @@ describe('persistent platform', () => {
     expect(await second.db.matchAction.count({ where: { matchId: match.matchId } })).toBe(3);
     expect((await second.rooms.profile(a.player.id)).statistics.find(s => s.gameId === 'sandbox')).toMatchObject({ played: 1, wins: 1, rating: 1000 });
     expect(await second.rooms.history(a.player.id)).toHaveLength(1);
-    expect((await second.rooms.view(room.id, a.player.id)).phase).toBe('waiting');
+    const lobby = await second.rooms.view(room.id, a.player.id);
+    expect(lobby.phase).toBe('waiting');
+    expect(lobby.matchId).toBeNull();
+    expect((await second.rooms.activeRoom(a.player.id))?.matchId ?? null).toBeNull();
+    await second.rooms.join(room.id, outsider.player);
+    const rejoined = await second.rooms.view(room.id, outsider.player.id);
+    expect(rejoined.phase).toBe('waiting');
+    expect(rejoined.matchId).toBeNull();
+    let version = rejoined.version;
+    for (const player of [a.player, b.player, outsider.player]) {
+      version++;
+      await second.rooms.ready(room.id, player.id, true, version - 1, randomUUID());
+    }
+    const rematch = await second.rooms.start(room.id, a.player.id, randomUUID());
+    expect(rematch.matchId).not.toBe(match.matchId);
+    expect(rematch.status).toBe('active');
+    await second.db.matchSnapshot.update({ where: { id: rematch.matchId }, data: { status: 'interrupted' } });
+    await second.db.roomSnapshot.update({ where: { id: room.id }, data: { status: 'waiting', activeMatchId: null } });
     await second.rooms.close(room.id, a.player.id);
   });
   it('transfers an offline host and archives inactive rooms without deleting history', async () => {

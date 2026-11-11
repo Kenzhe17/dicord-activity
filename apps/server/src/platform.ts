@@ -110,7 +110,16 @@ export class PlatformService {
       const membership = await tx.roomMember.findUnique({ where: { roomId_playerId: { roomId: id, playerId: actorId } } });
       if (!row || !membership) throw new DomainError('FORBIDDEN', 'Вы не участник комнаты');
       if (membership.leftAt || row.status === 'closed') return;
-      if (row.status === 'playing') throw new DomainError('CONFLICT', 'Сначала завершите матч; отключение не исключает из игры');
+      if (row.status === 'playing') {
+        // Only a player who already forfeited may release the seat mid-match;
+        // ordinary disconnects must not remove anyone from the game.
+        const matchRow = row.activeMatchId ? await tx.matchSnapshot.findUnique({ where: { id: row.activeMatchId } }) : null;
+        const checkpoint = matchRow?.state as { context?: { players?: string[] }; serialized?: string } | null;
+        const seat = checkpoint?.context?.players?.indexOf(actorId) ?? -1;
+        const forfeited = !!matchRow && seat >= 0 && typeof checkpoint?.serialized === 'string' &&
+          ((this.games.getModule(matchRow.gameId).restore(checkpoint.serialized) as { forfeited?: number[] }).forfeited ?? []).includes(seat);
+        if (!forfeited) throw new DomainError('CONFLICT', 'Сначала завершите матч; отключение не исключает из игры');
+      }
       const state = roomViewSchema.parse(row.state);
       const next = this.domain(state).leave(id, actorId);
       await tx.roomMember.update({ where: { roomId_playerId: { roomId: id, playerId: actorId } }, data: { leftAt: new Date(this.now()) } });

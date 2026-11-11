@@ -35,6 +35,12 @@ for (const mode of ['throw-in', 'transfer'] as const) for (let players = 2; play
     let s = createState({ mode }, { players: Array.from({ length: players }, (_, i) => 'sim' + i), seed, startedAt: 0 });
     let steps = 0;
     while (s.phase !== 'finished' && steps < 5000) {
+      // ~3% of steps: a random still-active seat surrenders (any participant may forfeit off-turn).
+      if (rng() < 0.03) {
+        const seat = s.active[Math.floor(rng() * s.active.length)]!;
+        try { s = transition(s, { type: 'surrender' }, s.players[seat]!, ++steps); assertInvariants(s); continue; }
+        catch (error) { throw new Error('Engine rejected legal surrender at seed ' + seed + ', step ' + steps, { cause: error }); }
+      }
       const options = legalActions(s, s.players[s.actor]!);
       if (!options.length) throw new Error('Engine has no legal action at seed ' + seed + ', step ' + steps);
       const action = choose(s, options, rng); independentCheck(s, action);
@@ -44,7 +50,7 @@ for (const mode of ['throw-in', 'transfer'] as const) for (let players = 2; play
     }
     if (s.phase !== 'finished') { row.stalledSeeds.push(seed); if (row.stalledSeeds.length > required / 10 + 10) throw new Error('Strategy stall budget exceeded'); continue; }
     const final = result(s)!;
-    if (!final || (!final.draw && final.losers.length !== 1)) throw new Error('Invalid terminal outcome, seed ' + seed);
+    if (!final || (!final.draw && final.losers.length < 1)) throw new Error('Invalid terminal outcome, seed ' + seed);
     row.completed++; row.draws += Number(final.draw); row.actions += steps; row.maxActions = Math.max(row.maxActions, steps);
     if (row.completed % 1000 === 0) console.log(mode + ' / ' + players + ': ' + row.completed + '/' + required);
   }
