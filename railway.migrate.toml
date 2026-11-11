@@ -1,9 +1,0 @@
-# Config for the one-off Arcade migration service only.
-# Point the migration service's config-as-code path to /railway.migrate.toml.
-# The main Arcade service keeps using /railway.toml.
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.migrate"
-
-[deploy]
-restartPolicyType = "NEVER"
