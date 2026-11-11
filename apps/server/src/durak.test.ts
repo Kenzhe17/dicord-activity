@@ -35,7 +35,7 @@ describe('Durak persistence and multiplayer', () => {
     const broken = await setup(), healthy = await setup();
     await broken.db.matchSnapshot.update({ where: { id: broken.match.matchId }, data: { state: {} } });
     const restarted = new PlatformService(healthy.db, healthy.rooms.games, () => Date.now() + 1000);
-    const failures = await restarted.tickTimers();
+    const { failures } = await restarted.tickTimers();
     expect(failures).toContainEqual({ matchId: broken.match.matchId, errorName: 'ZodError' });
     const recovered = await restarted.match(healthy.match.matchId, healthy.players[0]!.player.id);
     expect(recovered.version).toBe(1);

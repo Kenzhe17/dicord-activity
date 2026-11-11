@@ -210,40 +210,42 @@ export class PlatformService {
     });
     return this.match(envelope.matchId, actorId);
   }
-  async tickMatch(id: string): Promise<void> {
-    await atomic(this.db, async tx => {
+  async tickMatch(id: string): Promise<{ matchId: string; roomId: string } | null> {
+    return atomic(this.db, async tx => {
       const row = await tx.matchSnapshot.findUnique({ where: { id } });
-      if (!row || row.status !== 'active') return;
+      if (!row || row.status !== 'active') return null;
       const module = this.games.getModule(row.gameId);
-      if (!module.getSystemAction) return;
+      if (!module.getSystemAction) return null;
       const runtime = restoreMatch(module, row.state), now = this.now();
       const recovering = row.createdAt.getTime() < this.startedAt && !await tx.matchAction.findUnique({ where: { matchId_requestId: { matchId: id, requestId: this.recoveryId } } });
-      if (!recovering && now < this.startedAt + 30000 && row.createdAt.getTime() < this.startedAt) return;
+      if (!recovering && now < this.startedAt + 30000 && row.createdAt.getTime() < this.startedAt) return null;
       const presence = await tx.roomMember.findFirst({ where: { roomId: row.roomId, leftAt: null, lastSeenAt: { gte: new Date(Math.max(this.startedAt, now - 45000)) } } });
       const action = runtime.nextSystemAction(now, !!presence, recovering);
-      if (action === null) return;
+      if (action === null) return null;
       runtime.dispatchSystem(recovering ? this.recoveryId : randomUUID(), action, now);
-      await this.persistMatch(tx, row, runtime);
+      const finished = await this.persistMatch(tx, row, runtime);
       await tx.recoveryEvent.create({ data: { id: randomUUID(), roomId: row.roomId, matchId: id, kind: recovering ? 'match_timer_recovered' : 'match_timer_event' } });
+      return finished ? { matchId: id, roomId: row.roomId } : null;
     });
   }
-  async tickTimers(): Promise<{ matchId: string; errorName: string }[]> {
+  async tickTimers(): Promise<{ failures: { matchId: string; errorName: string }[]; finished: { matchId: string; roomId: string }[] }> {
     const timedGames = this.games.list().filter(g => g.status === 'ready' && this.games.getModule(g.id).getSystemAction).map(g => g.id);
     const matches = await this.db.matchSnapshot.findMany({ where: { status: 'active', gameId: { in: timedGames } }, select: { id: true } });
     const failures: { matchId: string; errorName: string }[] = [];
+    const finished: { matchId: string; roomId: string }[] = [];
     for (const match of matches) {
-      try { await this.tickMatch(match.id); }
+      try { const done = await this.tickMatch(match.id); if (done) finished.push(done); }
       catch (error) {
         // One damaged checkpoint or clock anomaly must not stop every other table.
         // Never include checkpoint contents, credentials or raw error messages in logs.
         failures.push({ matchId: match.id, errorName: error instanceof Error ? error.name : 'UnknownError' });
       }
     }
-    return failures;
+    return { failures, finished };
   }
-  private async persistMatch(tx: Tx, row: { id: string; roomId: string; gameId: string; version: number; status: string }, runtime: MatchRuntime<unknown, unknown, unknown, unknown>) {
+  private async persistMatch(tx: Tx, row: { id: string; roomId: string; gameId: string; version: number; status: string }, runtime: MatchRuntime<unknown, unknown, unknown, unknown>): Promise<boolean> {
       const snapshot = runtime.snapshot();
-      if (snapshot.version === row.version) return;
+      if (snapshot.version === row.version) return false;
       const record = snapshot.actions.at(-1);
       if (!record) throw new Error('Missing applied action');
       const result = runtime.result();
@@ -263,6 +265,7 @@ export class PlatformService {
         const { state, row: roomRow } = await this.room(tx, row.roomId);
         await tx.roomSnapshot.update({ where: { id: row.roomId }, data: { status: 'waiting', activeMatchId: null, state: json({ ...state, version: roomRow.version + 1, members: state.members.map(m => ({ ...m, ready: false })) }), version: roomRow.version + 1 } });
       }
+      return result !== null;
   }
   async profile(playerId: string) {
     const player = await this.db.player.findUnique({ where: { discordId: playerId }, include: { statistics: { where: { gameId: { in: this.games.list().map(g => g.id) } } } } });

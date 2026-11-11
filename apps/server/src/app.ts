@@ -93,6 +93,20 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
       }
     }
   }
+  // One-shot delivery of a just-finished match to current room subscribers.
+  // Waiting rooms deliberately hide matchId, so results cannot be re-fetched by joiners.
+  async function emitFinishedMatch(roomId: string, matchId: string): Promise<void> {
+    for (const [id, subscription] of subscriptions) {
+      if (subscription.roomId !== roomId) continue;
+      const socket = io.sockets.sockets.get(id);
+      if (!socket) continue;
+      try {
+        const session = await sessions.get(subscription.token);
+        const match = await rooms.match(matchId, session.player.id).catch(() => null);
+        if (match) socket.emit('match:state', match);
+      } catch { /* Subscriber went away or lost authorization. */ }
+    }
+  }
   io.use((socket, next) => {
     void (async () => {
       try { const token = z.string().min(1).max(128).parse(socket.handshake.auth['token']); await sessions.get(token); next(); }
@@ -134,6 +148,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
         const player = (await sessions.get(token)).player;
         const view = await rooms.action(player.id, raw);
         await publishRoom(view.roomId);
+        if (view.status === 'finished') await emitFinishedMatch(view.roomId, view.matchId);
         return view;
       }, ack);
     });
@@ -151,8 +166,9 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
         catch { io.sockets.sockets.get(id)?.disconnect(true); }
       }
       if (options.scheduleTimers !== false) {
-        const failures = await rooms.tickTimers();
+        const { failures, finished } = await rooms.tickTimers();
         if (failures.length) app.log.error({ failures }, 'Some match timers could not advance');
+        for (const done of finished) await emitFinishedMatch(done.roomId, done.matchId);
       }
       for (const roomId of new Set([...subscriptions.values()].map(s => s.roomId))) await publishRoom(roomId);
       if (++ticks % 30 === 0) await rooms.cleanup(config.ARCADE_ROOM_IDLE_MS, config.ARCADE_HOST_GRACE_MS);
@@ -253,7 +269,9 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   app.post('/api/matches/:id/actions', async req => {
     const player = await actor(req.headers.authorization); const envelope = actionEnvelopeSchema.parse(req.body);
     if (envelope.matchId !== params.parse(req.params).id) throw new DomainError('INVALID_INPUT', 'Неверный матч');
-    const match = await rooms.action(player.id, envelope); await publishRoom(match.roomId); return match;
+    const match = await rooms.action(player.id, envelope); await publishRoom(match.roomId);
+    if (match.status === 'finished') await emitFinishedMatch(match.roomId, match.matchId);
+    return match;
   });
   if (config.ARCADE_SERVE_WEB) {
     await app.register(staticFiles, { root: fileURLToPath(new URL('../../web/dist', import.meta.url)), index: 'index.html' });
