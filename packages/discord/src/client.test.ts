@@ -12,6 +12,7 @@ function fixture() {
       getInstanceConnectedParticipants: vi.fn(async () => ({ participants: [{ id: player.id, username: 'Participant' }] })),
       shareLink: vi.fn(async () => ({ success: true, didCopyLink: false, didSendMessage: true })),
       openInviteDialog: vi.fn(async () => ({})),
+      setActivity: vi.fn(async () => ({})),
     },
     subscribe: vi.fn(async () => {}), unsubscribe: vi.fn(async () => {}),
   };
@@ -26,7 +27,7 @@ describe('Activity integration', () => {
     expect(session.player.id).toBe(player.id);
     expect(session).not.toHaveProperty('accessToken');
     expect(exchange).toHaveBeenCalledWith('test-code', 'server-nonce');
-    expect(sdk.commands.authorize).toHaveBeenCalledWith(expect.objectContaining({ state: 'server-nonce', scope: ['identify'] }));
+    expect(sdk.commands.authorize).toHaveBeenCalledWith(expect.objectContaining({ state: 'server-nonce', scope: ['identify', 'rpc.activities.write'] }));
     expect(updates[0]).toMatchObject({ instanceId: 'instance', participantsAvailable: true });
     await client.dispose();
     expect(sdk.unsubscribe).toHaveBeenCalledTimes(1);

@@ -10,11 +10,12 @@ export interface ActivitySdk {
   customId: string | null;
   ready(): Promise<void>;
   commands: {
-    authorize(input: { client_id: string; response_type: 'code'; state: string; prompt: 'none'; scope: ['identify'] }): Promise<{ code: string }>;
+    authorize(input: { client_id: string; response_type: 'code'; state: string; prompt: 'none'; scope: ('identify' | 'rpc.activities.write')[] }): Promise<{ code: string }>;
     authenticate(input: { access_token: string }): Promise<{ user: { id: string } }>;
     getInstanceConnectedParticipants(): Promise<{ participants: Participant[] }>;
     shareLink(input: { message: string; custom_id?: string }): Promise<{ success: boolean; didCopyLink: boolean; didSendMessage: boolean }>;
     openInviteDialog(): Promise<unknown>;
+    setActivity(input: { activity: Record<string, unknown> | null }): Promise<unknown>;
   };
   subscribe(event: 'ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE', listener: (data: { participants: Participant[] }) => void): Promise<unknown>;
   unsubscribe(event: 'ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE', listener: (data: { participants: Participant[] }) => void): Promise<unknown>;
@@ -37,7 +38,14 @@ export class ActivityClient {
     await this.dispose();
     const generation = this.generation;
     await timeout(this.sdk.ready());
-    const { code } = await timeout(this.sdk.commands.authorize({ client_id: this.clientId, response_type: 'code', state, prompt: 'none', scope: ['identify'] }));
+    const authorizeInput = { client_id: this.clientId, response_type: 'code' as const, state, prompt: 'none' as const };
+    let code: string;
+    try {
+      ({ code } = await timeout(this.sdk.commands.authorize({ ...authorizeInput, scope: ['identify', 'rpc.activities.write'] })));
+    } catch {
+      // Rich Presence scope denied or unsupported — continue with identify only.
+      ({ code } = await timeout(this.sdk.commands.authorize({ ...authorizeInput, scope: ['identify'] })));
+    }
     const session = await exchange(code, state);
     try {
       const authenticated = await timeout(this.sdk.commands.authenticate({ access_token: session.accessToken }));
@@ -65,6 +73,9 @@ export class ActivityClient {
   }
   async openInviteDialog(): Promise<unknown> {
     return timeout(this.sdk.commands.openInviteDialog());
+  }
+  async setActivity(activity: Record<string, unknown> | null): Promise<unknown> {
+    return timeout(this.sdk.commands.setActivity({ activity }));
   }
   async dispose(): Promise<void> {
     this.generation++;

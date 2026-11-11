@@ -13,6 +13,8 @@ import { PlayerPages } from './components/PlayerPages';
 import { LegalPage } from './components/LegalPages';
 import { Lobby } from './components/Lobby';
 import { connectRoom } from './realtime';
+import { PresenceManager, describePresence } from './presence';
+import { parseRoomInviteCode } from './roomAccess';
 
 interface PublicConfig { authMode: 'disabled' | 'mock' | 'discord'; clientId: string | null; persistence: string; testGame: boolean }
 interface Bootstrap { session: AuthSession; room: RoomView | null; match: MatchView | null; preferences: Preferences }
@@ -24,7 +26,7 @@ const legalFromPath = (): 'terms' | 'privacy' | null => {
   return (match?.[1] as 'terms' | 'privacy' | undefined) ?? null;
 };
 export function App() {
-  const { session, room, preferences, setSession, setRoom, setMatch, setPreferences } = useArcade();
+  const { session, room, match, preferences, setSession, setRoom, setMatch, setPreferences } = useArcade();
   const [games, setGames] = useState<GameInfo[]>([]);
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
@@ -40,6 +42,7 @@ export function App() {
   const [connection, setConnection] = useState('Не подключено');
   const [context, setContext] = useState<ActivityContext | null>(null);
   const activity = useRef<ActivityClient | null>(null);
+  const presence = useRef<PresenceManager | null>(null);
   const started = useRef(false);
   const page = route.split('/')[0] ?? 'home';
   const selected = games.find(g => g.id === route.split('/')[1]);
@@ -69,11 +72,10 @@ export function App() {
   }
   const applyShareInvite = useCallback(async () => {
     const code = activity.current?.customId;
-    if (!code) return;
-    const match = /^([0-9a-fA-F-]{36}):([A-Za-z0-9_-]{16,})$/.exec(code);
-    if (!match) return;
+    const parsed = code ? parseRoomInviteCode(code) : null;
+    if (!parsed) return;
     try {
-      const joined = await post<RoomView>('/rooms/' + match[1] + '/join', { inviteToken: match[2] });
+      const joined = await post<RoomView>('/rooms/' + parsed.roomId + '/join', { inviteToken: parsed.inviteToken });
       setRoom(joined); setMatch(null); navigate('room');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Приглашение недействительно');
@@ -112,6 +114,16 @@ export function App() {
       closed: () => { setRoom(null); setMatch(null); navigate('rooms'); },
     });
   }, [session?.token, room?.id, setRoom, setMatch, navigate]);
+  useEffect(() => {
+    if (config?.authMode !== 'discord' || !activity.current) return;
+    presence.current ??= new PresenceManager(input => activity.current!.setActivity(input));
+    presence.current.update(describePresence({ page, targetId: route.split('/')[1], games, room, match, playerId: session?.player.id }));
+  }, [config?.authMode, session?.player.id, page, route, games, room, match]);
+  useEffect(() => {
+    const clear = () => { void activity.current?.setActivity(null).catch(() => {}); };
+    window.addEventListener('pagehide', clear);
+    return () => window.removeEventListener('pagehide', clear);
+  }, []);
   useEffect(() => {
     if (session && page === 'rooms') void api<RoomSummary[]>('/rooms').then(setRooms).catch(reason => setError(String(reason)));
   }, [session?.token, page]);
