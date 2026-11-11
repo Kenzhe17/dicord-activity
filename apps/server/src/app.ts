@@ -66,6 +66,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     allowRequest: (req, done) => done(null, req.headers.origin === allowedOrigin),
   });
   const subscriptions = new Map<string, { roomId: string; token: string; fingerprint: string; lastTouch: number }>();
+  const disconnectReasons = new Set(['server shutting down', 'server namespace disconnect', 'client namespace disconnect', 'transport close', 'transport error', 'ping timeout', 'parse error', 'forced close', 'forced server close']);
   async function publishRoom(roomId: string): Promise<void> {
     for (const [id, subscription] of subscriptions) {
       if (subscription.roomId !== roomId) continue;
@@ -91,14 +92,18 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   io.use((socket, next) => {
     void (async () => {
       try { const token = z.string().min(1).max(128).parse(socket.handshake.auth['token']); await sessions.get(token); next(); }
-      catch { next(new Error('UNAUTHORIZED')); }
+      catch { app.log.info({ event: 'realtime_auth_rejected' }, 'Realtime authentication rejected'); next(new Error('UNAUTHORIZED')); }
     })();
   });
   io.on('connection', socket => {
+    app.log.info({ event: 'realtime_connected' }, 'Realtime transport connected');
     const token = socket.handshake.auth['token'] as string;
     let events = 0;
     const reset = setInterval(() => { events = 0; }, 10000);
-    socket.on('disconnect', () => { clearInterval(reset); subscriptions.delete(socket.id); });
+    socket.on('disconnect', reason => {
+      clearInterval(reset); subscriptions.delete(socket.id);
+      app.log.info({ event: 'realtime_disconnected', reason: disconnectReasons.has(reason) ? reason : 'other' }, 'Realtime transport disconnected');
+    });
     async function execute<T>(operation: () => Promise<T>, ack: (reply: Reply<T>) => void) {
       if (typeof ack !== 'function') return;
       try {
@@ -116,6 +121,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
         subscriptions.set(socket.id, { roomId, token, fingerprint: '', lastTouch: Date.now() });
         await sessions.recovery(player.id, 'socket_resubscribed', roomId, room.matchId ?? undefined);
         await publishRoom(roomId);
+        app.log.info({ event: 'realtime_subscribed', hasMatch: !!room.matchId }, 'Realtime room synchronized');
         return room;
       }, ack);
     });
@@ -241,7 +247,14 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   if (config.ARCADE_SERVE_WEB) {
     await app.register(staticFiles, { root: fileURLToPath(new URL('../../web/dist', import.meta.url)), index: 'index.html' });
   }
-  app.addHook('preClose', async () => { clearInterval(sync); await synchronization; io.disconnectSockets(true); await new Promise<void>(resolve => io.close(() => resolve())); });
+  app.addHook('preClose', async () => {
+    clearInterval(sync); await synchronization;
+    app.log.info({ event: 'realtime_shutdown', connections: io.sockets.sockets.size }, 'Closing realtime transports for restart');
+    // io.close() closes the transport, allowing clients to reconnect. Sending a
+    // namespace DISCONNECT first permanently disables their automatic reconnect.
+    // Explicit disconnect(true) remains reserved for logout/authorization failure.
+    await io.close();
+  });
   app.addHook('onClose', async () => { await db.$disconnect(); });
   return { app, rooms, sessions, io, db };
 }

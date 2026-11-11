@@ -11,6 +11,7 @@ import { api, post, proxyPrefix, avatarSource } from './api';
 import { useArcade, storedToken } from './store';
 import { PlayerPages } from './components/PlayerPages';
 import { Lobby } from './components/Lobby';
+import { connectRoom } from './realtime';
 
 interface PublicConfig { authMode: 'disabled' | 'mock' | 'discord'; clientId: string | null; persistence: string; testGame: boolean }
 interface Bootstrap { session: AuthSession; room: RoomView | null; match: MatchView | null; preferences: Preferences }
@@ -73,17 +74,11 @@ export function App() {
   }, []);
   useEffect(() => {
     if (!session || !room) return;
-    const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({ auth: { token: session.token }, path: proxyPrefix() + '/socket.io', transports: ['websocket'] });
-    socket.on('connect', () => {
-      setConnection('Подключено');
-      socket.emit('room:subscribe', { roomId: room.id }, reply => { if (reply.ok) setRoom(reply.data); else setError(reply.error.message); });
+    const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({ autoConnect: false, auth: { token: session.token }, path: proxyPrefix() + '/socket.io', transports: ['websocket'] });
+    return connectRoom(socket, room.id, {
+      connection: setConnection, room: setRoom, match: setMatch, error: setError,
+      closed: () => { setRoom(null); setMatch(null); navigate('rooms'); },
     });
-    socket.on('disconnect', () => setConnection('Переподключение…'));
-    socket.on('connect_error', () => setConnection('Соединение недоступно'));
-    socket.on('room:state', setRoom);
-    socket.on('match:state', setMatch);
-    socket.on('room:closed', () => { setRoom(null); setMatch(null); navigate('rooms'); });
-    return () => { socket.disconnect(); };
   }, [session?.token, room?.id, setRoom, setMatch, navigate]);
   useEffect(() => {
     if (session && page === 'rooms') void api<RoomSummary[]>('/rooms').then(setRooms).catch(reason => setError(String(reason)));

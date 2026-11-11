@@ -11,7 +11,7 @@
       "actions": 716490,
       "maxActions": 143,
       "stalledSeeds": [],
-      "milliseconds": 14539
+      "milliseconds": 14016
     },
     {
       "mode": "throw-in",
@@ -22,7 +22,7 @@
       "actions": 1213517,
       "maxActions": 270,
       "stalledSeeds": [],
-      "milliseconds": 33003
+      "milliseconds": 20318
     },
     {
       "mode": "throw-in",
@@ -33,7 +33,7 @@
       "actions": 1196258,
       "maxActions": 242,
       "stalledSeeds": [],
-      "milliseconds": 23916
+      "milliseconds": 18923
     },
     {
       "mode": "throw-in",
@@ -44,7 +44,7 @@
       "actions": 1388007,
       "maxActions": 284,
       "stalledSeeds": [],
-      "milliseconds": 22664
+      "milliseconds": 23337
     },
     {
       "mode": "throw-in",
@@ -55,7 +55,7 @@
       "actions": 1367345,
       "maxActions": 282,
       "stalledSeeds": [],
-      "milliseconds": 21457
+      "milliseconds": 29726
     },
     {
       "mode": "transfer",
@@ -66,7 +66,7 @@
       "actions": 719187,
       "maxActions": 146,
       "stalledSeeds": [],
-      "milliseconds": 12167
+      "milliseconds": 15209
     },
     {
       "mode": "transfer",
@@ -77,7 +77,7 @@
       "actions": 1151454,
       "maxActions": 287,
       "stalledSeeds": [],
-      "milliseconds": 22163
+      "milliseconds": 31350
     },
     {
       "mode": "transfer",
@@ -88,7 +88,7 @@
       "actions": 1182168,
       "maxActions": 260,
       "stalledSeeds": [],
-      "milliseconds": 32914
+      "milliseconds": 37162
     },
     {
       "mode": "transfer",
@@ -99,7 +99,7 @@
       "actions": 1290105,
       "maxActions": 288,
       "stalledSeeds": [],
-      "milliseconds": 31309
+      "milliseconds": 39939
     },
     {
       "mode": "transfer",
@@ -110,7 +110,7 @@
       "actions": 1335434,
       "maxActions": 308,
       "stalledSeeds": [],
-      "milliseconds": 37624
+      "milliseconds": 35918
     }
   ]
 }

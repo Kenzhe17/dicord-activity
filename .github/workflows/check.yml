@@ -44,3 +44,14 @@ jobs:
       - run: node tooling/restart-smoke.mjs
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      - name: Repeat graceful restart E2E on Linux
+        run: pnpm exec playwright test tests/e2e/durak.spec.ts --grep 'complete Durak' --repeat-each=3
+      - name: Upload safe reconnect event diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconnect-diagnostics
+          path: tests/.artifacts/**/reconnect-diagnostics.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
