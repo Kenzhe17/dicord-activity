@@ -55,7 +55,7 @@ export class PlatformService {
     const { row, state } = await this.room(this.db, id);
     const room = this.domain(state).view(id, actorId);
     const members = await this.db.roomMember.findMany({ where: { roomId: id, leftAt: null } });
-    return { ...room, phase: row.status === 'playing' ? 'playing' : 'waiting', matchId: row.activeMatchId,
+    return { ...room, phase: row.status === 'playing' ? 'playing' : 'waiting', matchId: row.status === 'playing' ? row.activeMatchId : null,
       members: room.members.map(member => ({ ...member, connected: members.some(m => m.playerId === member.player.id && this.now() - m.lastSeenAt.getTime() < 45000) })) };
   }
   async activeRoom(actorId: string): Promise<RoomView | null> {
@@ -252,7 +252,7 @@ export class PlatformService {
           });
         }
         const { state, row: roomRow } = await this.room(tx, row.roomId);
-        await tx.roomSnapshot.update({ where: { id: row.roomId }, data: { status: 'waiting', state: json({ ...state, version: roomRow.version + 1, members: state.members.map(m => ({ ...m, ready: false })) }), version: roomRow.version + 1 } });
+        await tx.roomSnapshot.update({ where: { id: row.roomId }, data: { status: 'waiting', activeMatchId: null, state: json({ ...state, version: roomRow.version + 1, members: state.members.map(m => ({ ...m, ready: false })) }), version: roomRow.version + 1 } });
       }
   }
   async profile(playerId: string) {
