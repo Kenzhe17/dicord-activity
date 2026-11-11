@@ -40,11 +40,23 @@ Runtime-образ не содержит Prisma CLI и не мигрирует �
 
 ### Настройка сервиса arcade-migrate (один раз)
 
+**Важно:** корневой `railway.toml` применяется ко всем сервисам этого репозитория, и config-as-code имеет приоритет над настройками dashboard — поле «Dockerfile Path» в UI будет проигнорировано, пока сервис читает корневой `railway.toml` (он соберёт обычный `Dockerfile` и запустит веб-сервер вместо миграций; deployment при этом может показать SUCCESS). Поэтому сервис обязан использовать собственный конфиг.
+
 1. Убедитесь, что целевая БД — отдельный сервис ArcadePostgres, не база бота. В переменных arcade-migrate задайте только:
    `ARCADE_DATABASE_URL = ${{ArcadePostgres.DATABASE_URL}}` (имя сервиса — как в вашем проекте). Ссылка использует приватную сеть Railway; сервис обязан находиться в том же environment.
 2. Project canvas → New Service → GitHub repo → та же ветка `codex/arcade-rebuild`, имя `arcade-migrate`.
-3. Settings → Config as Code: укажите путь `/railway.migrate.toml`. Если Railway не принимает config-as-code для нового сервиса, вместо этого задайте переменную `RAILWAY_DOCKERFILE_PATH=Dockerfile.migrate` и в Settings → Deploy выключите healthcheck и restart policy (Never).
+3. Settings → Config as Code (Railway Config File): укажите **абсолютный путь `/railway.migrate.toml`**. Это обязательный шаг — без него сервис унаследует корневой `railway.toml` и соберёт не тот образ.
+   - Если Railway отклоняет config-as-code для нового сервиса: переменная `RAILWAY_DOCKERFILE_PATH=Dockerfile.migrate` + в Settings → Deploy restart policy **Never** и healthcheck **выключен**. В этом случае убедитесь в логах сборки, что используется именно `Dockerfile.migrate`.
 4. Переменные Discord/бота сервису миграций не нужны — не копируйте их.
+
+### Проверка правильного образа (до миграций)
+
+В логах деплоя arcade-migrate должно быть:
+
+- Build: используется `Dockerfile.migrate` (не `Dockerfile`).
+- Runtime: строки `== prisma migrate status ==`, затем `== prisma migrate deploy ==`, затем `Verification OK: arcade schema complete, all migrations finished.` и exit code 0.
+- Если вместо этого поднимается веб-сервер или `node apps/server/dist/index.js` — образ собран неверно, остановите deployment и проверьте config-as-code path.
+- Статус SUCCESS в Railway не является доказательством миграции — смотрите именно runtime-логи.
 
 ### Порядок выполнения
 

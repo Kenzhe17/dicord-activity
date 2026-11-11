@@ -11,6 +11,7 @@ COPY tsconfig.json ./
 COPY apps ./apps
 COPY packages ./packages
 COPY games ./games
+COPY tooling ./tooling
 RUN pnpm install --frozen-lockfile
 
 FROM node:24-bookworm-slim AS runtime
