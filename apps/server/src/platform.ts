@@ -1,4 +1,5 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { DomainError, createRoomSchema, actionEnvelopeSchema, roomViewSchema } from '@rize/shared';
 import type { Player, RoomView, RoomSummary, MatchView } from '@rize/shared';
 import { RoomDirectory } from '@rize/platform-core';
@@ -210,7 +211,57 @@ export class PlatformService {
     });
     return this.match(envelope.matchId, actorId);
   }
+  /** Deterministic data errors (bad checkpoint, illegal replay, schema drift)
+   * can never self-heal; after a streak the match is interrupted instead of
+   * erroring every second forever. Infrastructure errors never quarantine. */
+  private static readonly QUARANTINE_STREAK = 10;
+  private static readonly TICK_KINDS = ['match_timer_failed', 'match_timer_event', 'match_timer_recovered', 'match_quarantined'];
+  private async noteTickOutcome(id: string, failed: boolean): Promise<number> {
+    if (failed) {
+      await this.db.recoveryEvent.create({ data: { id: randomUUID(), matchId: id, kind: 'match_timer_failed' } });
+      const recent = await this.db.recoveryEvent.findMany({ where: { matchId: id, kind: { in: PlatformService.TICK_KINDS } }, orderBy: { occurredAt: 'desc' }, take: PlatformService.QUARANTINE_STREAK, select: { kind: true } });
+      let streak = 0;
+      for (const event of recent) { if (event.kind !== 'match_timer_failed') break; streak++; }
+      return streak;
+    }
+    const last = await this.db.recoveryEvent.findFirst({ where: { matchId: id, kind: { in: PlatformService.TICK_KINDS } }, orderBy: { occurredAt: 'desc' }, select: { kind: true } });
+    if (last?.kind === 'match_timer_failed') await this.db.recoveryEvent.create({ data: { id: randomUUID(), matchId: id, kind: 'match_timer_recovered' } });
+    return 0;
+  }
+  /** Terminal state for a checkpoint that can never be restored: the match is
+   * marked interrupted (state and history preserved, no result awarded) and a
+   * still-playing room returns to waiting so it is not wedged forever. */
+  private async quarantineMatch(id: string): Promise<{ matchId: string; roomId: string } | null> {
+    return atomic(this.db, async tx => {
+      const row = await tx.matchSnapshot.findUnique({ where: { id } });
+      if (!row || row.status !== 'active') return null;
+      await tx.matchSnapshot.update({ where: { id }, data: { status: 'interrupted', finishedAt: new Date(this.now()) } });
+      const roomRow = await tx.roomSnapshot.findUnique({ where: { id: row.roomId } });
+      if (roomRow && roomRow.status === 'playing' && roomRow.activeMatchId === id) {
+        const { state } = await this.room(tx, row.roomId);
+        await tx.roomSnapshot.update({ where: { id: row.roomId }, data: { status: 'waiting', activeMatchId: null, state: json({ ...state, version: roomRow.version + 1, members: state.members.map(m => ({ ...m, ready: false })) }), version: roomRow.version + 1 } });
+      }
+      await tx.recoveryEvent.create({ data: { id: randomUUID(), roomId: row.roomId, matchId: id, kind: 'match_quarantined' } });
+      return { matchId: id, roomId: row.roomId };
+    });
+  }
   async tickMatch(id: string): Promise<{ matchId: string; roomId: string } | null> {
+    try {
+      const done = await this.tickMatchAttempt(id);
+      await this.noteTickOutcome(id, false);
+      return done;
+    } catch (error) {
+      if (error instanceof DomainError || error instanceof z.ZodError) {
+        const streak = await this.noteTickOutcome(id, true);
+        if (streak >= PlatformService.QUARANTINE_STREAK) {
+          const quarantined = await this.quarantineMatch(id);
+          if (quarantined) return quarantined;
+        }
+      }
+      throw error;
+    }
+  }
+  private async tickMatchAttempt(id: string): Promise<{ matchId: string; roomId: string } | null> {
     return atomic(this.db, async tx => {
       const row = await tx.matchSnapshot.findUnique({ where: { id } });
       if (!row || row.status !== 'active') return null;

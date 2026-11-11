@@ -31,6 +31,32 @@ async function setup(mode = 'throw-in', count = 2) {
   return { ...instance, players, room, match };
 }
 describe('Durak persistence and multiplayer', () => {
+  it('restores checkpoints serialized before the forfeited field existed', async () => {
+    const instance = await setup();
+    const row = await instance.db.matchSnapshot.findUniqueOrThrow({ where: { id: instance.match.matchId } });
+    const checkpoint = row.state as Record<string, unknown>;
+    const legacy = JSON.parse(checkpoint['serialized'] as string) as Record<string, unknown>;
+    delete legacy['forfeited'];
+    await instance.db.matchSnapshot.update({ where: { id: row.id }, data: { state: { ...checkpoint, serialized: JSON.stringify(legacy) } } });
+    const platform = new PlatformService(instance.db, instance.rooms.games);
+    await expect(platform.tickMatch(instance.match.matchId)).resolves.toBeNull();
+    expect((await platform.match(instance.match.matchId, instance.players[0]!.player.id)).status).toBe('active');
+  });
+  it('quarantines a permanently unrestorable match instead of erroring every second', async () => {
+    const instance = await setup();
+    const row = await instance.db.matchSnapshot.findUniqueOrThrow({ where: { id: instance.match.matchId } });
+    const checkpoint = row.state as Record<string, unknown>;
+    // Engine-version drift is a deterministic DomainError on every tick.
+    await instance.db.matchSnapshot.update({ where: { id: row.id }, data: { state: { ...checkpoint, stateVersion: 99 } } });
+    const platform = new PlatformService(instance.db, instance.rooms.games);
+    for (let i = 0; i < 9; i++) await expect(platform.tickMatch(instance.match.matchId)).rejects.toThrow();
+    await expect(platform.tickMatch(instance.match.matchId)).resolves.toEqual({ matchId: instance.match.matchId, roomId: instance.room.id });
+    expect((await instance.db.matchSnapshot.findUniqueOrThrow({ where: { id: instance.match.matchId } })).status).toBe('interrupted');
+    const roomRow = await instance.db.roomSnapshot.findUniqueOrThrow({ where: { id: instance.room.id } });
+    expect(roomRow.status).toBe('waiting'); expect(roomRow.activeMatchId).toBeNull();
+    const { failures } = await platform.tickTimers();
+    expect(failures.map(f => f.matchId)).not.toContain(instance.match.matchId);
+  });
   it('isolates a damaged persisted match so other tables still recover their timers', async () => {
     const broken = await setup(), healthy = await setup();
     await broken.db.matchSnapshot.update({ where: { id: broken.match.matchId }, data: { state: {} } });

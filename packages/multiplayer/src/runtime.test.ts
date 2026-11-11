@@ -3,13 +3,13 @@ import { z } from 'zod';
 import { GameRegistry } from '@rize/platform-core';
 import type { GameModule } from '@rize/platform-core';
 import { MatchRuntime, restoreMatch } from './index';
-const stateSchema = z.object({ count: z.number().int(), secret: z.string() });
+const stateSchema = z.object({ count: z.number().int(), secret: z.string(), tag: z.string().default('legacy') });
 const fixture: GameModule<z.infer<typeof stateSchema>, { amount: number }, { target: number }, { count: number }> = {
   info: { id: 'counter', name: 'Test fixture', description: '', minPlayers: 2, maxPlayers: 2, status: 'ready', modes: [] },
   stateVersion: 1, stateSchema,
   settingsSchema: z.object({ target: z.number().int().positive() }),
   actionSchema: z.object({ amount: z.number().int().positive() }).strict(),
-  createInitialState: () => ({ count: 0, secret: 'private-fixture-value' }),
+  createInitialState: () => ({ count: 0, secret: 'private-fixture-value', tag: 'legacy' }),
   validateAction: (s, a, c) => c.actorId === 'dev:p1' && s.count + a.amount <= 3 ? { allowed: true } : { allowed: false, reason: 'Illegal move' },
   applyAction: (s, a) => ({ ...s, count: s.count + a.amount }),
   getPlayerView: s => ({ count: s.count }),
@@ -58,7 +58,16 @@ describe('server action runtime', () => {
     expect(() => restoreMatch(fixture, { ...snapshot, version: 55 })).toThrow();
     expect(() => restoreMatch(fixture, { ...snapshot, stateVersion: 2 })).toThrow();
     expect(() => restoreMatch(fixture, { ...snapshot, serialized: JSON.stringify({ count: 2, secret: 'tampered' }) })).toThrow();
-    expect(fixture.restore(snapshot.serialized)).toEqual({ count: 3, secret: 'private-fixture-value' });
+    expect(fixture.restore(snapshot.serialized)).toEqual({ count: 3, secret: 'private-fixture-value', tag: 'legacy' });
     expect(() => runtime.dispatch('dev:p1', { ...envelope, requestId: roomId, expectedVersion: 1 }, 200)).toThrow('завершён');
+  });
+  it('restores checkpoints serialized before a schema field gained a default', () => {
+    const runtime = create();
+    runtime.dispatch('dev:p1', envelope, 10);
+    const snapshot = runtime.snapshot();
+    const legacyState = JSON.parse(snapshot.serialized) as Record<string, unknown>;
+    delete legacyState['tag'];
+    const legacy = { ...snapshot, serialized: JSON.stringify(legacyState) };
+    expect(restoreMatch(fixture, legacy).snapshot().version).toBe(1);
   });
 });

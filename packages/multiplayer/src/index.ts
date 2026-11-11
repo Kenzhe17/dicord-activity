@@ -92,6 +92,9 @@ export function restoreMatch<S, A, C, V>(module: GameModule<S, A, C, V>, raw: un
   }
   module.stateSchema.parse(module.restore(snapshot.serialized));
   const replayed = runtime.snapshot();
-  if (replayed.version !== snapshot.version || replayed.serialized !== snapshot.serialized) throw new DomainError('CONFLICT', 'Состояние не соответствует журналу');
+  // Compare canonical parses, not raw strings: checkpoints written before a
+  // schema field gained a default must not fail replay forever.
+  const canonical = (serialized: string) => JSON.stringify(module.stateSchema.parse(JSON.parse(serialized)));
+  if (replayed.version !== snapshot.version || canonical(replayed.serialized) !== canonical(snapshot.serialized)) throw new DomainError('CONFLICT', 'Состояние не соответствует журналу');
   return runtime;
 }
