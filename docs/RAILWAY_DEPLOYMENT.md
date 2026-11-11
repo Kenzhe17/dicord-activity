@@ -30,17 +30,30 @@ Railway поддерживает Dockerfile и проверяет readiness на
 
 ## Миграции перед запуском
 
-Runtime-образ не содержит Prisma CLI и не мигрирует автоматически. Из checkout с devDependencies либо отдельного однократного migration job:
+Runtime-образ не содержит Prisma CLI и не мигрирует автоматически. Миграции применяет отдельный одноразовый сервис `arcade-migrate` из того же репозитория и ветки:
 
-~~~powershell
-pnpm install --frozen-lockfile
-pnpm db:generate
-# ARCADE_DATABASE_URL передан через защищённое окружение.
-pnpm --filter @rize/database exec prisma migrate status
-pnpm --filter @rize/database exec prisma migrate deploy
-~~~
+- `Dockerfile.migrate` — образ с полным workspace и Prisma CLI; запускает `tooling/migrate-arcade.mjs` и завершается.
+- `tooling/migrate-arcade.mjs` — `prisma migrate status` (диагностика), затем `prisma migrate deploy`, затем проверка: все 12 таблиц `arcade.*` и `_prisma_migrations` без незавершённых записей. URL БД никогда не печатается. Код выхода ненулевой при любой ошибке.
+- `railway.migrate.toml` — конфиг сервиса миграций: `dockerfilePath = Dockerfile.migrate`, `restartPolicyType = NEVER`, без healthcheck.
 
-Только после согласования целевой Arcade-БД, backup и SQL. Prisma config фиксирует schema arcade. Не используйте reset/db push. После миграций запустите deployment: приложение проверяет таблицы при старте.
+Запрещено: `migrate reset`, `db push`, миграции при старте приложения, ручной запуск migration.sql (первая миграция без квалифицированных имён — search_path arcade задаёт только prisma.config.ts).
+
+### Настройка сервиса arcade-migrate (один раз)
+
+1. Убедитесь, что целевая БД — отдельный сервис ArcadePostgres, не база бота. В переменных arcade-migrate задайте только:
+   `ARCADE_DATABASE_URL = ${{ArcadePostgres.DATABASE_URL}}` (имя сервиса — как в вашем проекте). Ссылка использует приватную сеть Railway; сервис обязан находиться в том же environment.
+2. Project canvas → New Service → GitHub repo → та же ветка `codex/arcade-rebuild`, имя `arcade-migrate`.
+3. Settings → Config as Code: укажите путь `/railway.migrate.toml`. Если Railway не принимает config-as-code для нового сервиса, вместо этого задайте переменную `RAILWAY_DOCKERFILE_PATH=Dockerfile.migrate` и в Settings → Deploy выключите healthcheck и restart policy (Never).
+4. Переменные Discord/бота сервису миграций не нужны — не копируйте их.
+
+### Порядок выполнения
+
+1. Перед запуском зафиксируйте план: `migrate status` в логах сборки/запуска покажет ровно две ожидаемые миграции — `202611090001_arcade_platform`, `202611090002_active_membership`. Проверьте их SQL в `packages/database/prisma/migrations/` и подтвердите целевую БД.
+2. Дождитесь успешного деплоя сервиса arcade-migrate (exit 0, в логах `Verification OK`). При повторном деплое `migrate deploy` — no-op.
+3. Удалите или остановите сервис arcade-migrate — он больше не нужен. Не удаляйте его до проверки `/health/ready`.
+4. Запустите/перезапустите основной сервис Arcade: при старте `buildApp` проверяет `player.count()`, затем `/health/live` и `/health/ready` отвечают 200.
+
+Тот же скрипт доступен локально после `pnpm install`: `pnpm db:migrate:arcade` при выставленном `ARCADE_DATABASE_URL`. Для удалённой БД используйте публичный proxy URL сервиса ArcadePostgres или `railway connect` — internal-хосты недоступны снаружи.
 
 ## Проверка
 

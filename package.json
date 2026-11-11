@@ -23,6 +23,7 @@
     "db:local": "node tooling/local-postgres.mjs",
     "db:migrate:local": "node tooling/migrate-local.mjs",
     "db:migrate:test": "node tooling/migrate-local.mjs --test",
+    "db:migrate:arcade": "node tooling/migrate-arcade.mjs",
     "check": "pnpm db:validate && pnpm db:generate && pnpm typecheck && pnpm lint && pnpm check:boundaries && pnpm test && pnpm build",
     "check:boundaries": "node tooling/check-boundaries.mjs"
   },

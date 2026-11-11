@@ -1,0 +1,21 @@
+# One-off Arcade migration job image.
+# Builds the workspace like the main Dockerfile (Prisma CLI lives in
+# devDependencies, so the runtime stage keeps the full install), then runs
+# `prisma migrate deploy` against ARCADE_DATABASE_URL and exits.
+# This image is never used by the main Arcade service.
+FROM node:24-bookworm-slim AS build
+WORKDIR /workspace
+RUN npm install --global pnpm@11.25.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY tsconfig.json ./
+COPY apps ./apps
+COPY packages ./packages
+COPY games ./games
+RUN pnpm install --frozen-lockfile
+
+FROM node:24-bookworm-slim AS runtime
+WORKDIR /workspace
+ENV NODE_ENV=production
+COPY --from=build --chown=node:node /workspace ./
+USER node
+CMD ["node", "tooling/migrate-arcade.mjs"]
