@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import rateLimit from '@fastify/rate-limit';
@@ -246,6 +247,13 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   });
   if (config.ARCADE_SERVE_WEB) {
     await app.register(staticFiles, { root: fileURLToPath(new URL('../../web/dist', import.meta.url)), index: 'index.html' });
+    const webIndex = readFileSync(fileURLToPath(new URL('../../web/dist/index.html', import.meta.url)));
+    app.setNotFoundHandler((req, reply) => {
+      if (['GET', 'HEAD'].includes(req.method) && !req.url.startsWith('/api/') && !req.url.startsWith('/socket.io')) {
+        return reply.type('text/html; charset=utf-8').send(webIndex);
+      }
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Not found' } });
+    });
   }
   app.addHook('preClose', async () => {
     clearInterval(sync); await synchronization;
