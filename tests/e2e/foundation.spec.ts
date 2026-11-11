@@ -78,7 +78,7 @@ test('private invitation runs the test GameModule and persists history', async (
     await a.getByLabel('Приватная комната').check();
     await a.getByRole('button', { name: 'Создать лобби' }).click();
     await a.getByRole('button', { name: 'Создать приглашение' }).click();
-    const invitation = await a.locator('.invite-code').innerText();
+    const invitation = await a.locator('.invite-code').inputValue();
     await b.getByRole('button', { name: 'Комнаты', exact: true }).click();
     await expect(b.getByRole('heading', { name: roomName })).toHaveCount(0);
     await b.getByRole('textbox', { name: 'Войти по коду' }).fill(invitation);

@@ -84,7 +84,7 @@ test('complete Durak: personal cards, defense, pickup, discard, reconnect and re
     await a.getByLabel('Мест за столом').selectOption('2');
     await a.getByRole('textbox', { name: 'Название комнаты' }).fill('Карточный вечер');
     await a.getByLabel('Приватная комната').check(); await a.getByRole('button', { name: 'Создать лобби' }).click();
-    await a.getByRole('button', { name: 'Создать приглашение' }).click(); const code = await a.locator('.invite-code').innerText();
+    await a.getByRole('button', { name: 'Создать приглашение' }).click(); const code = await a.locator('.invite-code').inputValue();
     await b.getByRole('button', { name: 'Комнаты', exact: true }).click(); await b.getByRole('textbox', { name: 'Войти по коду' }).fill(code); await b.getByRole('button', { name: 'Присоединиться' }).click();
     for (const page of pages) await page.getByRole('button', { name: 'Я готов', exact: true }).click();
     await a.getByRole('button', { name: 'Начать партию' }).click();
@@ -184,7 +184,7 @@ test('six players use transfer mode, real cards and a server-approved transfer c
     await host.getByRole('button', { name: /Дурак/ }).click(); await host.getByRole('button', { name: 'Создать комнату', exact: true }).click();
     await host.getByLabel('Режим', { exact: true }).selectOption('transfer'); await host.getByLabel('Приватная комната').check();
     await host.getByRole('button', { name: 'Создать лобби' }).click(); await host.getByRole('button', { name: 'Создать приглашение' }).click();
-    const code = await host.locator('.invite-code').innerText();
+    const code = await host.locator('.invite-code').inputValue();
     for (const page of pages.slice(1)) {
       await page.getByRole('button', { name: 'Комнаты', exact: true }).click(); await page.getByRole('textbox', { name: 'Войти по коду' }).fill(code); await page.getByRole('button', { name: 'Присоединиться' }).click();
       await expect(page.getByRole('heading', { name: 'Вечерняя партия', exact: true })).toBeVisible();
