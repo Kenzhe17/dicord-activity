@@ -97,6 +97,16 @@ test('complete Durak: personal cards, defense, pickup, discard, reconnect and re
     await a.setViewportSize({ width: 390, height: 844 });
     expect(await a.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await a.screenshot({ path: 'tests/.artifacts/durak-mobile-active.png', fullPage: true });
+    for (const [width, height] of [[360, 640], [390, 844], [768, 1024], [1280, 720], [1920, 1080]] as const) {
+      await a.setViewportSize({ width, height });
+      await a.waitForTimeout(150);
+      await expect(a.locator('.durak-game')).toBeVisible();
+      const fit = await a.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth, sh: document.documentElement.scrollHeight, ih: innerHeight }));
+      expect(fit.sw <= fit.iw, JSON.stringify(fit)).toBe(true);
+      expect(fit.sh <= fit.ih + 1, JSON.stringify(fit)).toBe(true);
+      await a.screenshot({ path: 'tests/.artifacts/durak-vp-' + width + 'x' + height + '.png' });
+    }
+    await a.setViewportSize({ width: 1280, height: 900 });
     let view = bootstraps[0]!.match, steps = 0, took = false, defended = false, discarded = false;
     while (view.status === 'active' && steps++ < 600) {
       const common = view.state as DurakView;

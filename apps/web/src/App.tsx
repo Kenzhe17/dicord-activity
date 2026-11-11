@@ -46,7 +46,8 @@ export function App() {
   const started = useRef(false);
   const page = route.split('/')[0] ?? 'home';
   const selected = games.find(g => g.id === route.split('/')[1]);
-  const immersive = !!(room && room.phase === 'playing' && room.gameId === 'durak');
+  const durakLive = !!match && match.gameId === 'durak' && match.status === 'active';
+  const immersive = !!(room && room.gameId === 'durak' && (room.phase === 'playing' || durakLive));
   const durakMode = immersive ? ((room?.settings as { mode?: string } | undefined)?.mode === 'transfer' ? 'Переводной' : 'Подкидной') : '';
   const navigate = useCallback((value: string) => { location.hash = '/' + value; setRoute(value); }, []);
   useEffect(() => { const changed = () => setRoute(currentRoute()); window.addEventListener('hashchange', changed); return () => window.removeEventListener('hashchange', changed); }, []);
