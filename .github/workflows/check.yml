@@ -42,7 +42,14 @@ jobs:
       - run: pnpm test:durak:sim
       - run: node tooling/smoke-built.mjs
       - run: node tooling/restart-smoke.mjs
-      - run: pnpm exec playwright install --with-deps chromium
+      - name: Install Playwright chromium (with apt retry)
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm exec playwright install --with-deps chromium; then exit 0; fi
+            echo "playwright install attempt $attempt failed; retrying in 30s"
+            sleep 30
+          done
+          exit 1
       - run: pnpm test:e2e
       - name: Repeat graceful restart E2E on Linux
         run: pnpm exec playwright test tests/e2e/durak.spec.ts --grep 'complete Durak' --repeat-each=3
