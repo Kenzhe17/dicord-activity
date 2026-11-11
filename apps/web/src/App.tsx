@@ -16,7 +16,7 @@ import { connectRoom } from './realtime';
 import { PresenceManager, describePresence } from './presence';
 import { parseRoomInviteCode } from './roomAccess';
 
-interface PublicConfig { authMode: 'disabled' | 'mock' | 'discord'; clientId: string | null; persistence: string; testGame: boolean }
+interface PublicConfig { authMode: 'disabled' | 'mock' | 'discord'; clientId: string | null; persistence: string; testGame: boolean; economy?: boolean }
 interface Bootstrap { session: AuthSession; room: RoomView | null; match: MatchView | null; preferences: Preferences }
 const icons = { durak: Spade, uno: Palette, mafia: VenetianMask, sandbox: FlaskConical };
 const navigation = [['home', 'Главная', House], ['games', 'Библиотека', Layers3], ['rooms', 'Комнаты', Users], ['profile', 'Профиль', UserRound], ['history', 'История', History], ['rankings', 'Рейтинги', Trophy], ['settings', 'Настройки', Settings]] as const;

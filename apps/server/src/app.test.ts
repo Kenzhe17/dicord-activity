@@ -75,6 +75,27 @@ describe('HTTP foundation', () => {
     expect((await instance.app.inject({ method: 'POST', url: '/api/auth/dev', payload: { name: 'Not allowed' } })).statusCode).toBe(403);
   });
 });
+describe('economy bridge', () => {
+  it('reports disabled without configuration and proxies read-only balances when enabled', async () => {
+    const { app } = await create();
+    const session = await login(app);
+    const headers = { authorization: 'Bearer ' + session.token };
+    const disabled = await app.inject({ method: 'GET', url: '/api/economy/balance', headers });
+    expect(disabled.json()).toEqual({ enabled: false });
+    const bridged = await buildApp(loadConfig({ ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: process.env['ARCADE_TEST_DATABASE_URL'] }), {
+      logger: false,
+      economy: { getBalance: async id => id === session.player.id ? { balance: 1234, exists: true } : null },
+    });
+    running.push(bridged);
+    const ok = await bridged.app.inject({ method: 'GET', url: '/api/economy/balance', headers });
+    expect(ok.json()).toEqual({ enabled: true, available: true, balance: 1234, walletExists: true });
+    expect((await bridged.app.inject({ method: 'GET', url: '/api/economy/balance' })).statusCode).toBe(401);
+    const down = await buildApp(loadConfig({ ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: process.env['ARCADE_TEST_DATABASE_URL'] }), { logger: false, economy: { getBalance: async () => null } });
+    running.push(down);
+    expect((await down.app.inject({ method: 'GET', url: '/api/economy/balance', headers })).json()).toEqual({ enabled: true, available: false });
+  });
+});
+
 describe('Socket.IO integration', () => {
   it('requires session, checks membership and streams room changes', async () => {
     const { app, rooms } = await create();

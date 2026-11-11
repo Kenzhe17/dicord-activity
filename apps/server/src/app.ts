@@ -17,8 +17,10 @@ import type { Config } from './config';
 import { createGameRegistry } from './games';
 import { PersistentSessions, requestSchema } from './persistence';
 import { PlatformService } from './platform';
+import { EconomyBridge } from './economy';
+import type { BalanceInfo } from './economy';
 
-export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean } = {}) {
+export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: { getBalance(id: string): Promise<BalanceInfo | null> } | null } = {}) {
   if (!options.database && !config.ARCADE_DATABASE_URL) throw new Error('ARCADE_DATABASE_URL is required; no implicit production or memory fallback');
   const db = options.database ?? createArcadeDatabase(config.ARCADE_DATABASE_URL ?? '');
   try { await db.$connect(); await db.player.count(); }
@@ -30,6 +32,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   const games = createGameRegistry(config.ARCADE_ENABLE_TEST_GAME && config.ARCADE_ENV !== 'production');
   const rooms = new PlatformService(db, games);
   const sessions = new PersistentSessions(db);
+  const economy = options.economy !== undefined ? options.economy : EconomyBridge.fromConfig(config);
   const oauth = options.oauth ?? (config.ARCADE_AUTH_MODE === 'discord' ? new DiscordOAuthProvider(config.ARCADE_DISCORD_CLIENT_ID ?? '', config.ARCADE_DISCORD_CLIENT_SECRET ?? '') : undefined);
   await app.register(rateLimit, { max: 180, timeWindow: '1 minute', keyGenerator: async req => {
     // Discord/NAT users may share a proxy IP. Only verified identities get separate buckets.
@@ -162,7 +165,14 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     try { await db.$queryRaw`SELECT 1`; return { status: 'ok', persistence: 'postgresql', databaseConnected: true }; }
     catch { return reply.code(503).send({ status: 'not_ready', persistence: 'postgresql', databaseConnected: false }); }
   });
-  app.get('/api/config', async () => ({ authMode: config.ARCADE_AUTH_MODE, clientId: config.ARCADE_DISCORD_CLIENT_ID ?? null, persistence: 'postgresql', testGame: config.ARCADE_ENABLE_TEST_GAME }));
+  app.get('/api/config', async () => ({ authMode: config.ARCADE_AUTH_MODE, clientId: config.ARCADE_DISCORD_CLIENT_ID ?? null, persistence: 'postgresql', testGame: config.ARCADE_ENABLE_TEST_GAME, economy: !!economy }));
+  app.get('/api/economy/balance', async req => {
+    const player = await actor(req.headers.authorization);
+    if (!economy) return { enabled: false };
+    const balance = await economy.getBalance(player.id);
+    if (!balance) return { enabled: true, available: false };
+    return { enabled: true, available: true, balance: balance.exists ? balance.balance : 0, walletExists: balance.exists };
+  });
   app.get('/api/games', async () => games.list());
   app.post('/api/auth/challenge', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async () => ({ state: await sessions.challenge() }));
   app.post('/api/auth/dev', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async req => {
