@@ -8,7 +8,7 @@ import type { StakesBridge } from './economy';
 const running: Awaited<ReturnType<typeof buildApp>>[] = [];
 afterEach(async () => { for (const instance of running.splice(0)) await instance.app.close(); });
 
-type Bridge = StakesBridge & { getBalance: Mock; escrow: Mock; settle: Mock; refund: Mock; listReservedEscrows: Mock };
+type Bridge = StakesBridge & { getBalance: Mock; escrow: Mock; settle: Mock; refund: Mock; listReservedEscrows: Mock; claimPending: Mock };
 function bridge(overrides: Partial<StakesBridge> = {}): Bridge {
   return {
     getBalance: vi.fn(async () => ({ balance: 1000, exists: true })),
@@ -16,6 +16,7 @@ function bridge(overrides: Partial<StakesBridge> = {}): Bridge {
     settle: vi.fn(async () => ({ ok: true as const })),
     refund: vi.fn(async () => ({ ok: true as const })),
     listReservedEscrows: vi.fn(async () => [] as { opId: string; createdAt: string }[]),
+    claimPending: vi.fn(async () => ({ ok: true })),
     ...overrides,
   } as Bridge;
 }
@@ -103,7 +104,7 @@ describe('pooled durak stakes', () => {
     econ.listReservedEscrows.mockResolvedValue([{ opId, createdAt: old }]);
     await instance.rooms.tickTimers();
     expect(econ.refund).toHaveBeenCalledWith(opId);
-    const events = await instance.db.recoveryEvent.findMany({ where: { kind: 'stake_orphan_refunded' } });
+    const events = await instance.db.recoveryEvent.findMany({ where: { kind: 'stake_orphan_refunded', roomId: instance.room.id } });
     expect(events).toHaveLength(1);
   });
   it('settles the full pool to the winner after a surrender finish', async () => {
@@ -193,5 +194,8 @@ describe('pooled durak stakes', () => {
     expect(await instance.db.recoveryEvent.count({ where: { matchId: match.matchId, kind: 'stake_payout_overflow' } })).toBe(1);
     const view = await instance.rooms.match(match.matchId, instance.a.player.id);
     expect(view.stakes?.payouts[0]?.overflow).toBe(40);
+    // The parked overflow is claimed from the bot on the next reconcile pass.
+    await instance.rooms.tickTimers();
+    expect(econ.claimPending).toHaveBeenCalledWith(expect.stringContaining(instance.room.id));
   });
 });

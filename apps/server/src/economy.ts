@@ -25,6 +25,8 @@ export interface StakesBridge {
    * Optional so partial implementations remain valid; Arcade skips the
    * orphan scan when absent. */
   listReservedEscrows?(): Promise<ReservedEscrow[] | null>;
+  /** Claim overflow winnings parked as pending credits on the bot. */
+  claimPending?(opId: string): Promise<{ ok: boolean; reason?: BridgeFailure | undefined } | null>;
 }
 
 const failure = (reason: BridgeFailure): { ok: false; reason: BridgeFailure } => ({ ok: false, reason });
@@ -144,5 +146,12 @@ export class EconomyBridge {
     } catch {
       return null;
     }
+  }
+
+  /** Ask the bot to credit pending overflow for an escrow, up to the cap. */
+  async claimPending(opId: string): Promise<{ ok: boolean; reason?: BridgeFailure | undefined } | null> {
+    const result = await this.post('/internal/economy/claim_pending', { op_id: opId }, z.object({ ok: z.boolean() }).loose());
+    if (!result.ok) return { ok: false, reason: result.reason };
+    return result.data.ok ? { ok: true } : { ok: false, reason: 'conflict' };
   }
 }

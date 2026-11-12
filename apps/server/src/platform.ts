@@ -356,8 +356,15 @@ export class PlatformService {
     // are (re)settled here — bridge operations are idempotent.
     const pending = await this.db.economyOperation.findMany({ where: { kind: 'stake_hold', status: 'reserved' }, select: { matchId: true }, distinct: ['matchId'] });
     for (const entry of pending) await this.settleMatch(entry.matchId).catch(() => null);
-    await this.reconcileOrphanEscrows();
+    await this.reconcileEconomy();
     return { failures, finished };
+  }
+  /** Throttled economy reconciliation: orphan refunds + pending-credit claims. */
+  private async reconcileEconomy(): Promise<void> {
+    if (!this.economy || this.now() - this.lastStakeReconcile < 60000) return;
+    this.lastStakeReconcile = this.now();
+    await this.reconcileOrphanEscrows();
+    await this.reconcilePendingCredits();
   }
   /** Escrows reserved on the bot but never committed to a match (process died
    * between the bridge call and the DB transaction) are refunded here. The
@@ -365,8 +372,7 @@ export class PlatformService {
    * in-flight start is never refunded mid-commit. */
   private async reconcileOrphanEscrows(): Promise<void> {
     const bridge = this.economy;
-    if (!bridge?.listReservedEscrows || this.now() - this.lastStakeReconcile < 60000) return;
-    this.lastStakeReconcile = this.now();
+    if (!bridge?.listReservedEscrows) return;
     const escrows = await bridge.listReservedEscrows().catch(() => null);
     if (!escrows) return;
     const cutoff = this.now() - 120000;
@@ -380,6 +386,20 @@ export class PlatformService {
         await this.db.recoveryEvent.create({ data: { id: randomUUID(), roomId: roomId && /^[0-9a-f-]{36}$/i.test(roomId) ? roomId : null, kind: 'stake_orphan_refunded' } });
       }
     }
+  }
+  /** Overflow winnings parked as pending credits on the bot are claimed once
+   * per reconciliation pass; whatever still exceeds the cap stays queued
+   * bot-side until a later claim fits. */
+  private async reconcilePendingCredits(): Promise<void> {
+    const bridge = this.economy;
+    if (!bridge?.claimPending) return;
+    const overflowed = await this.db.economyOperation.findMany({
+      where: { kind: 'stake_payout', status: 'settled', externalReference: { contains: '"overflow":' } },
+      select: { externalReference: true },
+    });
+    const ops = new Set<string>();
+    for (const row of overflowed) { const ref = stakeRef(row.externalReference); if (ref?.overflow) ops.add(ref.op); }
+    for (const op of ops) await bridge.claimPending(op).catch(() => null);
   }
   /** Settle or refund a finished/interrupted match's pooled stake. Safe to call
    * repeatedly: bot-side escrow ops are idempotent and payout rows use
