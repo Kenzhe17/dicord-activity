@@ -3,20 +3,35 @@ import { z } from 'zod';
 
 /** Discord Interaction types we handle. */
 export const INTERACTION_PING = 1;
+export const INTERACTION_APPLICATION_COMMAND = 2;
 export const INTERACTION_MESSAGE_COMPONENT = 3;
 /** LAUNCH_ACTIVITY — opens the activity owned by the responding application. */
 export const RESPONSE_LAUNCH_ACTIVITY = 12;
 export const RESPONSE_PONG = 1;
+export const RESPONSE_CHANNEL_MESSAGE = 4;
+export const RESPONSE_DEFERRED_CHANNEL_MESSAGE = 5;
 
 export const ARCADE_LAUNCH_CUSTOM_ID = 'arcade_launch';
+export const NEWS_COMMAND_NAME = 'news';
+
+const snowflake = z.string().regex(/^[0-9]{17,20}$/);
+const interactionUser = z.object({ id: snowflake }).passthrough();
 
 export const interactionSchema = z.object({
   type: z.number().int(),
   id: z.string().min(1),
   token: z.string().min(1),
-  guild_id: z.string().optional(),
-  channel_id: z.string().optional(),
-  data: z.object({ custom_id: z.string().optional() }).passthrough().optional(),
+  guild_id: snowflake.optional(),
+  channel_id: snowflake.optional(),
+  user: interactionUser.optional(),
+  member: z.object({
+    user: interactionUser,
+    permissions: z.string().optional(),
+  }).passthrough().optional(),
+  data: z.object({
+    custom_id: z.string().optional(),
+    name: z.string().optional(),
+  }).passthrough().optional(),
 }).passthrough();
 export type DiscordInteraction = z.infer<typeof interactionSchema>;
 
@@ -41,5 +56,38 @@ export function interactionResponse(interaction: DiscordInteraction, allowedGuil
     void allowedGuildId;
     return { type: RESPONSE_LAUNCH_ACTIVITY };
   }
-  return { type: 4, data: { content: 'Неизвестная команда.', flags: 64 } }; // ephemeral message
+  return { type: RESPONSE_CHANNEL_MESSAGE, data: { content: 'Неизвестная команда.', flags: 64 } }; // ephemeral message
+}
+
+/** /news is restricted to Discord administrators or the configured allowlist. */
+export function interactionCallerId(interaction: DiscordInteraction): string | null {
+  return interaction.member?.user.id ?? interaction.user?.id ?? null;
+}
+export function interactionIsAdmin(interaction: DiscordInteraction, adminIds: ReadonlySet<string>): boolean {
+  const permissions = interaction.member?.permissions;
+  // ADMINISTRATOR permission bit (1 << 3)
+  if (permissions && (BigInt(permissions) & 8n) === 8n) return true;
+  const caller = interactionCallerId(interaction);
+  return caller !== null && adminIds.has(caller);
+}
+
+export const ANNOUNCEMENT_CONTENT = 'активити Дурак 🃏\nНа сервере стала доступна собственная Discord-активность Дурак.\nРежимы: Подкидной и переводной\nИгроки: от 2 до 6\nСобирайте друзей и играйте прямо в Discord!\n-# Новые игры уже в разработке.';
+export function announcementPayload(): { content: string; components: unknown[] } {
+  return {
+    content: ANNOUNCEMENT_CONTENT,
+    components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Запустить r!z3 Arcade', emoji: { name: '🃏' }, custom_id: ARCADE_LAUNCH_CUSTOM_ID }] }],
+  };
+}
+
+/** Posts the announcement through the interaction followup webhook — the
+ * interaction token authorizes posting into the invoking channel, so no bot
+ * token or channel id is needed. */
+export async function publishAnnouncementViaWebhook(applicationId: string, interactionToken: string): Promise<void> {
+  const response = await fetch(`https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(announcementPayload()),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error('announcement webhook failed: ' + response.status);
 }

@@ -22,7 +22,7 @@ import { EconomyBridge } from './economy';
 import type { BalanceInfo, StakesBridge } from './economy';
 import { DiscordGuildVerifier } from './guild';
 import type { GuildVerifier } from './guild';
-import { interactionResponse, interactionSchema, verifyDiscordSignature } from './interactions';
+import { announcementPayload, interactionIsAdmin, interactionResponse, interactionSchema, NEWS_COMMAND_NAME, publishAnnouncementViaWebhook, verifyDiscordSignature } from './interactions';
 import type { DiscordInteraction } from './interactions';
 
 export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: ({ getBalance(id: string): Promise<BalanceInfo | null> } & Partial<StakesBridge>) | null; discordCdnBase?: string; guildVerifier?: GuildVerifier | null } = {}) {
@@ -234,9 +234,46 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
       return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Invalid interaction signature' } });
     }
     const interaction = interactionSchema.parse(req.body) as DiscordInteraction;
+    // /news slash command — publishes the announcement into the invoking
+    // channel via the interaction followup webhook. Guild admins and the
+    // configured allowlist only; duplicates are skipped when the bot token is
+    // available to read channel history.
+    if (interaction.type === 2 && interaction.data?.name === NEWS_COMMAND_NAME) {
+      if (!interactionIsAdmin(interaction, adminIds())) {
+        return { type: 4, data: { content: 'Команда доступна только администраторам.', flags: 64 } };
+      }
+      const botToken = config.ARCADE_DISCORD_BOT_TOKEN;
+      if (botToken && interaction.channel_id && interaction.guild_id) {
+        try {
+          const history = await fetch(`https://discord.com/api/v10/channels/${interaction.channel_id}/messages?limit=20`, {
+            headers: { authorization: 'Bot ' + botToken }, signal: AbortSignal.timeout(8000),
+          });
+          if (history.ok) {
+            const messages: unknown = await history.json();
+            const exists = Array.isArray(messages) && messages.some(m => {
+              const msg = m as { components?: { components?: { custom_id?: string }[] }[] };
+              return msg.components?.some(row => row.components?.some(c => c.custom_id === 'arcade_launch'));
+            });
+            if (exists) return { type: 4, data: { content: 'Объявление уже опубликовано в этом канале.', flags: 64 } };
+          }
+        } catch { /* history check is best-effort; posting still proceeds */ }
+      }
+      const appId = config.ARCADE_DISCORD_CLIENT_ID;
+      if (!appId) return { type: 4, data: { content: 'Приложение не настроено.', flags: 64 } };
+      reply.send({ type: 5 }); // deferred channel message — must answer within 3s
+      try {
+        await publishAnnouncementViaWebhook(appId, interaction.token);
+      } catch {
+        await fetch(`https://discord.com/api/v10/webhooks/${appId}/${interaction.token}/messages/@original`, {
+          method: 'PATCH', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ content: 'Не удалось опубликовать объявление. Попробуйте позже.', allowed_mentions: { parse: [] } }),
+          signal: AbortSignal.timeout(8000),
+        }).catch(() => {});
+      }
+      return reply;
+    }
     return interactionResponse(interaction, guildId ?? null);
   });
-  const ANNOUNCEMENT_CONTENT = 'активити Дурак 🃏\nНа сервере стала доступна собственная Discord-активность Дурак.\nРежимы: Подкидной и переводной\nИгроки: от 2 до 6\nСобирайте друзей и играйте прямо в Discord!\n-# Новые игры уже в разработке.';
   const adminIds = () => new Set((config.ARCADE_ADMIN_USER_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean));
   app.post('/api/admin/announce', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async req => {
     const player = await actor(req.headers.authorization);
@@ -257,10 +294,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     }
     const response = await fetch('https://discord.com/api/v10/channels/' + channelId + '/messages', {
       method: 'POST', headers,
-      body: JSON.stringify({
-        content: ANNOUNCEMENT_CONTENT,
-        components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Запустить r!z3 Arcade', emoji: { name: '🃏' }, custom_id: 'arcade_launch' }] }],
-      }),
+      body: JSON.stringify(announcementPayload()),
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) throw new DomainError('GAME_UNAVAILABLE', 'Discord отклонил публикацию объявления');

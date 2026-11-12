@@ -22,6 +22,7 @@ function discordConfig(extra: Record<string, string> = {}) {
     ARCADE_DISCORD_PUBLIC_KEY: publicKeyHex,
     ARCADE_ANNOUNCE_CHANNEL_ID: '111111111111111111',
     ARCADE_ADMIN_USER_IDS: '123456789012345678',
+    ARCADE_DISCORD_CLIENT_ID: '1566376251185168394',
     ARCADE_DISCORD_BOT_TOKEN: 'bot-token-test',
     ...extra,
   });
@@ -65,6 +66,37 @@ describe('interactions endpoint', () => {
     expect((await app.inject({ method: 'POST', url: '/api/discord/interactions', headers: { 'content-type': 'application/json' }, payload: ping })).statusCode).toBe(401);
     const forged = await app.inject({ method: 'POST', url: '/api/discord/interactions', headers: { 'content-type': 'application/json', ...sign(launch) }, payload: launch.replace('arcade_launch', 'arcade_launchX') });
     expect(forged.statusCode).toBe(401);
+  });
+  const newsCmd = (userId: string, perms?: string) => JSON.stringify({
+    type: 2, id: 'i3', token: 'news-token', guild_id: '1196165488565289012', channel_id: '222222222222222222',
+    member: { user: { id: userId }, permissions: perms },
+    data: { name: 'news' },
+  });
+  it('answers /news for admins with a deferred response and posts via webhook', async () => {
+    const webhookCalls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: { method?: string }) => {
+      const url = String(input);
+      webhookCalls.push(url + (init?.method ? ' ' + init.method : ''));
+      if (url.includes('/messages?limit=')) return new Response('[]', { status: 200 });
+      return new Response('{"id":"m"}', { status: 200 });
+    }));
+    const { app } = await create();
+    const body = newsCmd('123456789012345678');
+    const response = await app.inject({ method: 'POST', url: '/api/discord/interactions', headers: { 'content-type': 'application/json', ...sign(body) }, payload: body });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ type: 5 });
+    expect(webhookCalls.some(c => c.includes('/webhooks/1566376251185168394/news-token'))).toBe(true);
+  });
+  it('denies /news to non-admins and guild admins pass via permissions bit', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200 })));
+    const { app } = await create();
+    const denied = newsCmd('999999999999999999');
+    const deniedRes = await app.inject({ method: 'POST', url: '/api/discord/interactions', headers: { 'content-type': 'application/json', ...sign(denied) }, payload: denied });
+    expect(deniedRes.json()).toMatchObject({ type: 4 });
+    // permissions '8' = ADMINISTRATOR bit → allowed even outside allowlist
+    const adminPerms = newsCmd('999999999999999999', '8');
+    const allowed = await app.inject({ method: 'POST', url: '/api/discord/interactions', headers: { 'content-type': 'application/json', ...sign(adminPerms) }, payload: adminPerms });
+    expect(allowed.json()).toEqual({ type: 5 });
   });
   it('fails closed when no public key is configured', async () => {
     const config = discordConfig();
