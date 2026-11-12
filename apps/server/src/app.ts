@@ -31,7 +31,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   });
   const economy = options.economy !== undefined ? options.economy : EconomyBridge.fromConfig(config);
   const games = createGameRegistry(config.ARCADE_ENABLE_TEST_GAME && config.ARCADE_ENV !== 'production');
-  const rooms = new PlatformService(db, games, Date.now, economy && typeof (economy as StakesBridge).escrow === 'function' ? economy as StakesBridge : null);
+  const rooms = new PlatformService(db, games, Date.now, economy && typeof (economy as StakesBridge).escrow === 'function' ? economy as StakesBridge : null, config.ARCADE_STAKES_ENABLED);
   const sessions = new PersistentSessions(db);
   const oauth = options.oauth ?? (config.ARCADE_AUTH_MODE === 'discord' ? new DiscordOAuthProvider(config.ARCADE_DISCORD_CLIENT_ID ?? '', config.ARCADE_DISCORD_CLIENT_SECRET ?? '') : undefined);
   await app.register(rateLimit, { max: 180, timeWindow: '1 minute', keyGenerator: async req => {

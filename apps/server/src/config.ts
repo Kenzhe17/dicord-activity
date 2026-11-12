@@ -15,6 +15,9 @@ const schema = z.object({
   ARCADE_ECONOMY_BRIDGE_URL: z.url().optional(),
   ARCADE_ECONOMY_BRIDGE_TOKEN: z.string().min(32).optional(),
   ARCADE_ECONOMY_GUILD_ID: z.string().regex(/^[0-9]{17,20}$/).optional(),
+  // Paid stakes stay disabled until this is explicitly turned on; the
+  // read-only balance bridge works regardless.
+  ARCADE_STAKES_ENABLED: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
 }).superRefine((c, ctx) => {
   if (c.ARCADE_ENV === 'production' && (c.ARCADE_AUTH_MODE === 'mock' || c.ARCADE_ENABLE_TEST_GAME)) ctx.addIssue({ code: 'custom', message: 'Mock authentication and test games are forbidden in production' });
   if (c.ARCADE_AUTH_MODE === 'discord' && (!c.ARCADE_DISCORD_CLIENT_ID || !c.ARCADE_DISCORD_CLIENT_SECRET)) ctx.addIssue({ code: 'custom', message: 'Discord credentials required' });

@@ -7,11 +7,27 @@ const balanceResponse = z.object({
 
 export interface BalanceInfo { balance: number | null; exists: boolean }
 
+/** Definitive vs transient bridge outcomes. `unavailable`, `rate_limited` and
+ * `invalid_response` are retryable; everything else is a final answer. */
+export type BridgeFailure = 'insufficient' | 'conflict' | 'unauthorized' | 'bad_request' | 'not_found' | 'rate_limited' | 'unavailable' | 'invalid_response';
+export const TRANSIENT_FAILURES: readonly BridgeFailure[] = ['rate_limited', 'unavailable', 'invalid_response'];
+
+export type EscrowResult = { ok: true; state?: string | undefined; userId?: string | undefined; replayed?: boolean | undefined } | { ok: false; reason: BridgeFailure; userId?: string | undefined };
+export type SettleResult = { ok: true; payouts?: { userId: string; credited: number; overflow: number }[] | undefined } | { ok: false; reason: BridgeFailure };
+export type RefundResult = { ok: true; replayed?: boolean | undefined } | { ok: false; reason: BridgeFailure };
+export interface ReservedEscrow { opId: string; createdAt: string }
+
 export interface StakesBridge {
-  escrow(opId: string, stakes: { userId: string; amount: number }[]): Promise<{ ok: boolean; state?: string | undefined; userId?: string | undefined; replayed?: boolean | undefined } | null>;
-  settle(opId: string, payouts: { userId: string; amount: number }[]): Promise<{ ok: boolean; payouts?: { userId: string; credited: number; overflow: number }[] | undefined } | null>;
-  refund(opId: string): Promise<boolean | null>;
+  escrow(opId: string, stakes: { userId: string; amount: number }[]): Promise<EscrowResult>;
+  settle(opId: string, payouts: { userId: string; amount: number }[]): Promise<SettleResult>;
+  refund(opId: string): Promise<RefundResult>;
+  /** Read-only reconciliation feed: escrows still 'reserved' on the bot side.
+   * Optional so partial implementations remain valid; Arcade skips the
+   * orphan scan when absent. */
+  listReservedEscrows?(): Promise<ReservedEscrow[] | null>;
 }
+
+const failure = (reason: BridgeFailure): { ok: false; reason: BridgeFailure } => ({ ok: false, reason });
 
 /** Server-to-server client for the bot's internal economy endpoint.
  * The shared token is only ever sent in a header — never logged or returned. */
@@ -48,43 +64,85 @@ export class EconomyBridge {
     }
   }
 
-  private async post<T>(path: string, body: unknown, schema: z.ZodType<T>): Promise<T | null> {
+  /** POST with classified outcomes: HTTP status + error body map to a
+   * BridgeFailure so callers can tell insufficient funds from outages. */
+  private async post<T>(path: string, body: unknown, schema: z.ZodType<T>): Promise<{ ok: true; data: T } | { ok: false; reason: BridgeFailure; error?: string | undefined; userId?: string | undefined }> {
+    let response: Response;
     try {
-      const response = await fetch(this.baseUrl + path + '?guild_id=' + this.guildId, {
+      response = await fetch(this.baseUrl + path + '?guild_id=' + this.guildId, {
         method: 'POST',
         headers: { 'x-bridge-token': this.token, 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-      if (!response.ok) return null;
-      const parsed = schema.safeParse(await response.json());
-      return parsed.success ? parsed.data : null;
     } catch {
-      return null;
+      return { ok: false, reason: 'unavailable' };
+    }
+    const reason = (status: number): BridgeFailure =>
+      status === 400 ? 'bad_request' :
+      status === 401 || status === 403 ? 'unauthorized' :
+      status === 404 ? 'not_found' :
+      status === 409 ? 'conflict' :
+      status === 429 ? 'rate_limited' : 'unavailable';
+    if (!response.ok) {
+      let error: string | undefined, userId: string | undefined;
+      try {
+        const parsed = z.object({ error: z.string().optional(), user_id: z.string().optional() }).loose().safeParse(await response.json());
+        if (parsed.success) { error = parsed.data.error; userId = parsed.data.user_id; }
+      } catch { /* body may be empty */ }
+      // The bot reports insufficient funds as 409 + error=insufficient.
+      if (response.status === 409 && error === 'insufficient') return { ok: false, reason: 'insufficient', error, userId };
+      return { ok: false, reason: reason(response.status), error, userId };
+    }
+    try {
+      const parsed = schema.safeParse(await response.json());
+      return parsed.success ? { ok: true, data: parsed.data } : { ok: false, reason: 'invalid_response' };
+    } catch {
+      return { ok: false, reason: 'invalid_response' };
     }
   }
 
-  /** All-or-nothing pooled stake reservation. `null` means the bridge could
-   * not be reached — paid matches must treat that as unavailable, never free. */
-  async escrow(opId: string, stakes: { userId: string; amount: number }[]): Promise<{ ok: boolean; state?: string | undefined; userId?: string | undefined; replayed?: boolean | undefined } | null> {
+  /** All-or-nothing pooled stake reservation, idempotent by opId. */
+  async escrow(opId: string, stakes: { userId: string; amount: number }[]): Promise<EscrowResult> {
     const result = await this.post('/internal/economy/escrow', { op_id: opId, stakes: stakes.map(s => ({ user_id: s.userId, amount: s.amount })) },
       z.object({ ok: z.boolean(), state: z.string().optional(), user_id: z.string().optional(), error: z.string().optional(), replayed: z.boolean().optional() }).loose());
-    if (!result) return null;
-    if (!result.ok && result.error === 'insufficient') return { ok: false, userId: result.user_id };
-    return { ok: result.ok, state: result.state, replayed: result.replayed };
+    if (!result.ok) return { ok: false, reason: result.reason, ...(result.userId !== undefined ? { userId: result.userId } : {}) };
+    const data = result.data;
+    if (!data.ok) return failure(data.error === 'insufficient' ? 'insufficient' : 'conflict');
+    return { ok: true, state: data.state, userId: data.user_id, replayed: data.replayed };
   }
 
   /** Settle a reserved escrow into winner payouts. Idempotent by op_id. */
-  async settle(opId: string, payouts: { userId: string; amount: number }[]): Promise<{ ok: boolean; payouts?: { userId: string; credited: number; overflow: number }[] | undefined } | null> {
+  async settle(opId: string, payouts: { userId: string; amount: number }[]): Promise<SettleResult> {
     const result = await this.post('/internal/economy/settle', { op_id: opId, payouts: payouts.map(p => ({ user_id: p.userId, amount: p.amount })) },
-      z.object({ ok: z.boolean(), payouts: z.array(z.object({ user_id: z.string(), credited: z.number().int(), overflow: z.number().int() })).optional() }).loose());
-    if (!result) return null;
-    return { ok: result.ok, payouts: result.payouts?.map(p => ({ userId: p.user_id, credited: p.credited, overflow: p.overflow })) };
+      z.object({ ok: z.boolean(), payouts: z.array(z.object({ user_id: z.string(), credited: z.number().int(), overflow: z.number().int() })).optional(), error: z.string().optional() }).loose());
+    if (!result.ok) return failure(result.reason);
+    const data = result.data;
+    if (!data.ok) return failure(data.error === 'payout_exceeds_pool' ? 'bad_request' : 'conflict');
+    return { ok: true, payouts: data.payouts?.map(p => ({ userId: p.user_id, credited: p.credited, overflow: p.overflow })) };
   }
 
   /** Refund a reserved escrow in full. Idempotent by op_id. */
-  async refund(opId: string): Promise<boolean | null> {
-    const result = await this.post('/internal/economy/refund', { op_id: opId }, z.object({ ok: z.boolean() }).loose());
-    return result ? result.ok : null;
+  async refund(opId: string): Promise<RefundResult> {
+    const result = await this.post('/internal/economy/refund', { op_id: opId }, z.object({ ok: z.boolean(), error: z.string().optional() }).loose());
+    if (!result.ok) return failure(result.reason);
+    const data = result.data;
+    if (!data.ok) return failure('conflict');
+    return { ok: true };
+  }
+
+  /** Reserved escrows on the bot side, for orphan reconciliation. */
+  async listReservedEscrows(): Promise<ReservedEscrow[] | null> {
+    try {
+      const response = await fetch(this.baseUrl + '/internal/economy/escrows?guild_id=' + this.guildId, {
+        headers: { 'x-bridge-token': this.token, accept: 'application/json' },
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      if (!response.ok) return null;
+      const parsed = z.object({ escrows: z.array(z.object({ op_id: z.string(), created_at: z.string() })) }).safeParse(await response.json());
+      return parsed.success ? parsed.data.escrows.map(e => ({ opId: e.op_id, createdAt: e.created_at })) : null;
+    } catch {
+      return null;
+    }
   }
 }

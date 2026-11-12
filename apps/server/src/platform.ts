@@ -10,13 +10,15 @@ import { atomic, hash, json } from './persistence';
 import type { Tx } from './persistence';
 
 import type { StakesBridge } from './economy';
-interface StakeRef { op: string; stake: number }
+import { TRANSIENT_FAILURES } from './economy';
+interface StakeRef { op: string; stake: number; overflow?: number }
 const stakeRef = (raw: string | null): StakeRef | null => { try { const v = JSON.parse(raw ?? '') as StakeRef; return typeof v?.op === 'string' && Number.isInteger(v?.stake) ? v : null; } catch { return null; } };
 
 export class PlatformService {
   private readonly startedAt: number;
   private readonly recoveryId = randomUUID();
-  constructor(readonly db: PrismaClient, readonly games: GameRegistry, private readonly now = Date.now, private readonly economy: StakesBridge | null = null) { this.startedAt = now(); }
+  private lastStakeReconcile = 0;
+  constructor(readonly db: PrismaClient, readonly games: GameRegistry, private readonly now = Date.now, private readonly economy: StakesBridge | null = null, private readonly stakesEnabled = false) { this.startedAt = now(); }
   private async room(tx: Tx, id: string) {
     const row = await tx.roomSnapshot.findUnique({ where: { id } });
     if (!row || row.status === 'closed') throw new DomainError('NOT_FOUND', 'Комната не найдена');
@@ -184,48 +186,56 @@ export class PlatformService {
   }
   async start(id: string, actorId: string, requestId: string): Promise<MatchView> {
     const stake = await this.stakeContext(id);
-    let escrowOpId: string | null = null, escrowMine = false;
+    let escrowOpId: string | null = null;
     if (stake) {
-      if (!this.economy) throw new DomainError('GAME_UNAVAILABLE', 'Ставки временно недоступны — матч не начат');
+      // Paid matches require the explicit activation flag AND a reachable
+      // bridge; free matches (stake = 0) never touch either.
+      if (!this.stakesEnabled || !this.economy) throw new DomainError('GAME_UNAVAILABLE', 'Ставки временно недоступны — матч не начат');
+      // Cheap pre-check so obviously invalid starts never reserve coins.
+      const { state: preState } = await this.room(this.db, id);
+      this.domain(preState).assertStartable(id, actorId);
       const prior = await this.db.requestReceipt.findUnique({ where: { actorId_requestId: { actorId, requestId } } });
       if (!prior) {
-        // Deterministic per requestId: HTTP retries replay the same escrow,
-        // while every rematch (new requestId) reserves a fresh pool.
-        escrowOpId = 'arcade-stake:' + id + ':' + requestId;
+        // Deterministic per requestId AND participant set: HTTP retries of the
+        // same start replay one escrow, a changed roster gets a fresh op id,
+        // and every rematch (new requestId) reserves a fresh pool.
+        escrowOpId = 'arcade-stake:' + id + ':' + requestId + ':' + hash(JSON.stringify(stake)).slice(0, 24);
         const escrow = await this.economy.escrow(escrowOpId, stake.players.map(playerId => ({ userId: playerId, amount: stake.amount })));
-        if (!escrow) throw new DomainError('GAME_UNAVAILABLE', 'Банк временно недоступен — матч не начат');
-        if (!escrow.ok) throw new DomainError('CONFLICT', escrow.userId ? 'Недостаточно монет у одного из игроков' : 'Не удалось зарезервировать ставку');
-        escrowMine = !escrow.replayed;
+        if (!escrow.ok) {
+          if (escrow.reason === 'insufficient') throw new DomainError('CONFLICT', 'Недостаточно монет у одного из игроков');
+          throw new DomainError('GAME_UNAVAILABLE', 'Банк временно недоступен — матч не начат');
+        }
       }
     }
-    let outcome: { id: string; created: boolean };
-    try {
-      outcome = await atomic(this.db, async tx => {
-        const prior = await this.receipt(tx, actorId, requestId, { op: 'start', id });
-        if (prior) return { id: prior, created: false };
-        const { row, state } = await this.room(tx, id);
-        if (row.status !== 'waiting') throw new DomainError('CONFLICT', 'Матч уже идёт');
-        const room = this.domain(state).assertStartable(id, actorId);
-        const module = this.games.getModule(room.gameId);
-        const nextId = randomUUID();
-        const seed = randomInt(0, 2147483647);
-        const runtime = new MatchRuntime(module, room.settings, { players: room.members.map(m => m.player.id), seed, startedAt: this.now() }, id, nextId);
-        await tx.matchSnapshot.create({ data: { id: nextId, roomId: id, gameId: room.gameId, stateVersion: module.stateVersion, version: 0, seed, state: json(runtime.snapshot()), status: 'active', participants: { create: room.members.map(m => ({ playerId: m.player.id })) } } });
-        if (escrowOpId) for (const member of room.members) {
-          await tx.economyOperation.create({ data: { id: randomUUID(), idempotencyKey: 'hold:' + hash(escrowOpId + ':' + member.player.id), playerId: member.player.id, matchId: nextId, kind: 'stake_hold', status: 'reserved', externalReference: JSON.stringify({ op: escrowOpId, stake: stake!.amount }) } });
-        }
-        await tx.roomSnapshot.update({ where: { id }, data: { status: 'playing', activeMatchId: nextId, version: row.version + 1, state: json({ ...state, version: row.version + 1 }), lastActiveAt: new Date(this.now()) } });
-        await this.remember(tx, actorId, requestId, { op: 'start', id }, nextId);
-        return { id: nextId, created: true };
-      });
-    } catch (error) {
-      // Only the attempt that created the escrow may refund it — a replayed
-      // escrow belongs to a concurrent identical request that may still win.
-      if (escrowOpId && escrowMine && this.economy) await this.economy.refund(escrowOpId).catch(() => null);
-      throw error;
-    }
+    const outcome = await atomic(this.db, async tx => {
+      const prior = await this.receipt(tx, actorId, requestId, { op: 'start', id });
+      if (prior) return { id: prior, created: false };
+      const { row, state } = await this.room(tx, id);
+      if (row.status !== 'waiting') throw new DomainError('CONFLICT', 'Матч уже идёт');
+      const room = this.domain(state).assertStartable(id, actorId);
+      if (escrowOpId && stake) {
+        // The escrowed roster must be exactly the roster this match commits:
+        // atomic() serializes all platform writes, so members cannot change
+        // inside this transaction — only between escrow and commit.
+        const committed = room.members.map(m => m.player.id);
+        if (committed.length !== stake.players.length || committed.some((p, i) => p !== stake.players[i]))
+          throw new DomainError('CONFLICT', 'Состав игроков изменился — запустите матч повторно');
+      }
+      const module = this.games.getModule(room.gameId);
+      const nextId = randomUUID();
+      const seed = randomInt(0, 2147483647);
+      const runtime = new MatchRuntime(module, room.settings, { players: room.members.map(m => m.player.id), seed, startedAt: this.now() }, id, nextId);
+      await tx.matchSnapshot.create({ data: { id: nextId, roomId: id, gameId: room.gameId, stateVersion: module.stateVersion, version: 0, seed, state: json(runtime.snapshot()), status: 'active', participants: { create: room.members.map(m => ({ playerId: m.player.id })) } } });
+      if (escrowOpId) for (const member of room.members) {
+        await tx.economyOperation.create({ data: { id: randomUUID(), idempotencyKey: 'hold:' + hash(escrowOpId + ':' + member.player.id), playerId: member.player.id, matchId: nextId, kind: 'stake_hold', status: 'reserved', externalReference: JSON.stringify({ op: escrowOpId, stake: stake!.amount }) } });
+      }
+      await tx.roomSnapshot.update({ where: { id }, data: { status: 'playing', activeMatchId: nextId, version: row.version + 1, state: json({ ...state, version: row.version + 1 }), lastActiveAt: new Date(this.now()) } });
+      await this.remember(tx, actorId, requestId, { op: 'start', id }, nextId);
+      return { id: nextId, created: true };
+    });
     // A prior receipt means the existing match already owns this escrow op —
-    // refunding it here would steal an active match's stake.
+    // refunding it here would steal an active match's stake. Escrows orphaned
+    // by a failed commit are refunded by the reconciliation scan in tickTimers.
     return this.match(outcome.id, actorId);
   }
   async match(id: string, actorId: string): Promise<MatchView> {
@@ -238,7 +248,7 @@ export class PlatformService {
     const stakes = ref ? {
       perPlayer: ref.stake, pool: ref.stake * holds.length,
       settlement: holds[0]!.status === 'reserved' ? 'pending' : holds[0]!.status,
-      payouts: ops.filter(o => o.kind === 'stake_payout').map(o => ({ playerId: o.playerId, amount: stakeRef(o.externalReference)?.stake ?? 0, status: o.status })),
+      payouts: ops.filter(o => o.kind === 'stake_payout').map(o => { const r = stakeRef(o.externalReference); return { playerId: o.playerId, amount: r?.stake ?? 0, status: o.status, ...(r?.overflow ? { overflow: r.overflow } : {}) }; }),
     } : null;
     return { matchId: id, roomId: row.roomId, gameId: row.gameId, status: row.status, createdAt: row.createdAt.toISOString(), finishedAt: row.finishedAt?.toISOString(), ...runtime.view(actorId), result: runtime.result(), stakes };
   }
@@ -346,7 +356,30 @@ export class PlatformService {
     // are (re)settled here — bridge operations are idempotent.
     const pending = await this.db.economyOperation.findMany({ where: { kind: 'stake_hold', status: 'reserved' }, select: { matchId: true }, distinct: ['matchId'] });
     for (const entry of pending) await this.settleMatch(entry.matchId).catch(() => null);
+    await this.reconcileOrphanEscrows();
     return { failures, finished };
+  }
+  /** Escrows reserved on the bot but never committed to a match (process died
+   * between the bridge call and the DB transaction) are refunded here. The
+   * bot's escrow created_at must be older than the grace window so an
+   * in-flight start is never refunded mid-commit. */
+  private async reconcileOrphanEscrows(): Promise<void> {
+    const bridge = this.economy;
+    if (!bridge?.listReservedEscrows || this.now() - this.lastStakeReconcile < 60000) return;
+    this.lastStakeReconcile = this.now();
+    const escrows = await bridge.listReservedEscrows().catch(() => null);
+    if (!escrows) return;
+    const cutoff = this.now() - 120000;
+    for (const escrow of escrows) {
+      if (!escrow.opId.startsWith('arcade-stake:') || new Date(escrow.createdAt).getTime() > cutoff) continue;
+      const known = await this.db.economyOperation.findFirst({ where: { kind: 'stake_hold', externalReference: { contains: escrow.opId } }, select: { id: true } });
+      if (known) continue;
+      const refunded = await bridge.refund(escrow.opId);
+      if (refunded.ok) {
+        const roomId = escrow.opId.split(':')[1];
+        await this.db.recoveryEvent.create({ data: { id: randomUUID(), roomId: roomId && /^[0-9a-f-]{36}$/i.test(roomId) ? roomId : null, kind: 'stake_orphan_refunded' } });
+      }
+    }
   }
   /** Settle or refund a finished/interrupted match's pooled stake. Safe to call
    * repeatedly: bot-side escrow ops are idempotent and payout rows use
@@ -368,8 +401,8 @@ export class PlatformService {
       // Draw, interruption, or no eligible winners: documented void policy is
       // a full refund of every reservation, including surrendered players.
       const refunded = await this.economy.refund(ref.op);
-      if (refunded === true) await this.db.economyOperation.updateMany({ where: { matchId, kind: 'stake_hold', status: 'reserved' }, data: { status: 'refunded' } });
-      else if (refunded === false) {
+      if (refunded.ok) await this.db.economyOperation.updateMany({ where: { matchId, kind: 'stake_hold', status: 'reserved' }, data: { status: 'refunded' } });
+      else if (!TRANSIENT_FAILURES.includes(refunded.reason)) {
         await this.db.economyOperation.updateMany({ where: { matchId, kind: 'stake_hold', status: 'reserved' }, data: { status: 'settlement_failed' } });
         await this.db.recoveryEvent.create({ data: { id: randomUUID(), matchId, kind: 'stake_refund_rejected' } });
       }
@@ -387,16 +420,26 @@ export class PlatformService {
       }
     });
     const settled = await this.economy.settle(ref.op, payouts);
-    if (settled?.ok) {
+    if (settled.ok) {
+      // Record any balance-cap overflow durably: the bot clamps credits at
+      // MAX_BALANCE and reports the remainder — it is never silently lost.
+      const overflowed = (settled.payouts ?? []).filter(p => p.overflow > 0);
+      if (overflowed.length) await atomic(this.db, async tx => {
+        for (const payout of overflowed) {
+          const amount = payouts.find(p => p.userId === payout.userId)?.amount ?? 0;
+          await tx.economyOperation.update({ where: { idempotencyKey: 'payout:' + matchId + ':' + payout.userId }, data: { externalReference: JSON.stringify({ op: ref.op, stake: amount, overflow: payout.overflow }) } });
+        }
+        await tx.recoveryEvent.create({ data: { id: randomUUID(), matchId, kind: 'stake_payout_overflow' } });
+      });
       await this.db.economyOperation.updateMany({ where: { matchId, kind: 'stake_payout', status: 'pending' }, data: { status: 'settled' } });
       await this.db.economyOperation.updateMany({ where: { matchId, kind: 'stake_hold', status: 'reserved' }, data: { status: 'settled' } });
       await this.db.recoveryEvent.create({ data: { id: randomUUID(), matchId, kind: 'stake_settled' } });
-    } else if (settled && !settled.ok) {
+    } else if (!TRANSIENT_FAILURES.includes(settled.reason)) {
       await this.db.economyOperation.updateMany({ where: { matchId, kind: 'stake_payout', status: 'pending' }, data: { status: 'settlement_failed' } });
       await this.db.economyOperation.updateMany({ where: { matchId, kind: 'stake_hold', status: 'reserved' }, data: { status: 'settlement_failed' } });
       await this.db.recoveryEvent.create({ data: { id: randomUUID(), matchId, kind: 'stake_settle_rejected' } });
     }
-    // settled === null → bridge unreachable; rows stay pending for the next tick.
+    // Transient failures → rows stay pending for the next tick.
   }
   private async persistMatch(tx: Tx, row: { id: string; roomId: string; gameId: string; version: number; status: string }, runtime: MatchRuntime<unknown, unknown, unknown, unknown>): Promise<boolean> {
       const snapshot = runtime.snapshot();
