@@ -18,9 +18,9 @@ import { createGameRegistry } from './games';
 import { PersistentSessions, requestSchema } from './persistence';
 import { PlatformService } from './platform';
 import { EconomyBridge } from './economy';
-import type { BalanceInfo } from './economy';
+import type { BalanceInfo, StakesBridge } from './economy';
 
-export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: { getBalance(id: string): Promise<BalanceInfo | null> } | null; discordCdnBase?: string } = {}) {
+export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: ({ getBalance(id: string): Promise<BalanceInfo | null> } & Partial<StakesBridge>) | null; discordCdnBase?: string } = {}) {
   if (!options.database && !config.ARCADE_DATABASE_URL) throw new Error('ARCADE_DATABASE_URL is required; no implicit production or memory fallback');
   const db = options.database ?? createArcadeDatabase(config.ARCADE_DATABASE_URL ?? '');
   try { await db.$connect(); await db.player.count(); }
@@ -29,10 +29,10 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     logger: options.logger === false ? false : { redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body', 'res.headers.set-cookie'], serializers: { req: req => ({ method: req.method, url: String(req.url).split('?')[0] ?? '/' }) } },
     bodyLimit: 16384, requestTimeout: 15000, rewriteUrl: req => (req.url ?? '/').replace(/^\/\.proxy(?=\/)/, ''),
   });
-  const games = createGameRegistry(config.ARCADE_ENABLE_TEST_GAME && config.ARCADE_ENV !== 'production');
-  const rooms = new PlatformService(db, games);
-  const sessions = new PersistentSessions(db);
   const economy = options.economy !== undefined ? options.economy : EconomyBridge.fromConfig(config);
+  const games = createGameRegistry(config.ARCADE_ENABLE_TEST_GAME && config.ARCADE_ENV !== 'production');
+  const rooms = new PlatformService(db, games, Date.now, economy && typeof (economy as StakesBridge).escrow === 'function' ? economy as StakesBridge : null);
+  const sessions = new PersistentSessions(db);
   const oauth = options.oauth ?? (config.ARCADE_AUTH_MODE === 'discord' ? new DiscordOAuthProvider(config.ARCADE_DISCORD_CLIENT_ID ?? '', config.ARCADE_DISCORD_CLIENT_SECRET ?? '') : undefined);
   await app.register(rateLimit, { max: 180, timeWindow: '1 minute', keyGenerator: async req => {
     // Discord/NAT users may share a proxy IP. Only verified identities get separate buckets.

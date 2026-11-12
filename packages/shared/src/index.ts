@@ -31,7 +31,7 @@ export const roomViewSchema = z.object({
 export type RoomView = z.infer<typeof roomViewSchema>;
 export type RoomMember = RoomView['members'][number];
 export interface RoomSummary { id: string; name: string; gameId: string; players: number; maxPlayers: number }
-export interface MatchView { matchId: string; roomId: string; gameId: string; status: string; version: number; state: unknown; result: { winners: readonly string[]; losers: readonly string[]; draw: boolean } | null; createdAt?: string; finishedAt?: string | undefined }
+export interface MatchView { matchId: string; roomId: string; gameId: string; status: string; version: number; state: unknown; result: { winners: readonly string[]; losers: readonly string[]; draw: boolean } | null; createdAt?: string; finishedAt?: string | undefined; stakes?: { perPlayer: number; pool: number; settlement: string; payouts: { playerId: string; amount: number; status: string }[] } | null | undefined }
 export interface Profile { player: Player; joinedAt: string; statistics: { gameId: string; played: number; wins: number; losses: number; draws: number; rating: number }[] }
 export interface HistoryEntry { id: string; gameId: string; finishedAt: string | null; outcome: string | null; ratingDelta: number | null }
 export interface RankingEntry { place: number; player: Player; rating: number; wins: number; played: number }

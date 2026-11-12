@@ -49,3 +49,11 @@
 .result-standing.winner small{color:#d8b56a}
 .result-actions{justify-content:center;margin-top:10px}
 .brand-mark-z3{font-size:.42em;font-style:normal;vertical-align:.95em;margin-left:-.2em;letter-spacing:-.05em}
+.stake-tag{display:inline-flex;align-items:center;gap:5px;color:#d8b56a}
+.stake-line{display:flex;align-items:center;gap:7px;margin:10px 0 0;font-size:12px;color:#b9b4c4}
+.stake-line strong{color:#e8d9a8}
+.stake-payouts{margin:12px auto 0;max-width:520px;background:#1d1a24;border:1px solid #37324a;border-radius:10px;padding:12px 16px}
+.stake-payouts-title{display:flex;align-items:center;gap:7px;justify-content:center;margin:0 0 8px;font-size:12px;color:#c9b98d}
+.stake-payout{display:flex;justify-content:space-between;font-size:12px;color:#a9a5b5;padding:4px 0}
+.stake-payout.mine{color:#e8d9a8;font-weight:600}
+.stake-payout strong{color:#9ecdb7}
