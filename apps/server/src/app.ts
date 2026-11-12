@@ -22,7 +22,7 @@ import { EconomyBridge } from './economy';
 import type { BalanceInfo, StakesBridge } from './economy';
 import { DiscordGuildVerifier } from './guild';
 import type { GuildVerifier } from './guild';
-import { announcementPayload, interactionIsAdmin, interactionResponse, interactionSchema, NEWS_COMMAND_NAME, publishAnnouncementViaWebhook, verifyDiscordSignature } from './interactions';
+import { interactionIsAdmin, interactionResponse, interactionSchema, NEWS_COMMAND_NAME, patchNewsReply, publishAnnouncementToChannel, verifyDiscordSignature } from './interactions';
 import type { DiscordInteraction } from './interactions';
 
 export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: ({ getBalance(id: string): Promise<BalanceInfo | null> } & Partial<StakesBridge>) | null; discordCdnBase?: string; guildVerifier?: GuildVerifier | null } = {}) {
@@ -234,76 +234,63 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
       return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Invalid interaction signature' } });
     }
     const interaction = interactionSchema.parse(req.body) as DiscordInteraction;
-    // /news slash command — publishes the announcement into the invoking
-    // channel via the interaction followup webhook. Guild admins and the
-    // configured allowlist only; duplicates are skipped when the bot token is
-    // available to read channel history.
+    // /news slash command — the caller gets only an ephemeral reply; the
+    // announcement itself is posted as a regular bot message into the channel,
+    // so no "used /news" line appears under the post.
     if (interaction.type === 2 && interaction.data?.name === NEWS_COMMAND_NAME) {
       if (!interactionIsAdmin(interaction, adminIds())) {
         return { type: 4, data: { content: 'Команда доступна только администраторам.', flags: 64 } };
       }
       const botToken = config.ARCADE_DISCORD_BOT_TOKEN;
-      if (botToken && interaction.channel_id && interaction.guild_id) {
-        try {
-          const history = await fetch(`https://discord.com/api/v10/channels/${interaction.channel_id}/messages?limit=20`, {
-            headers: { authorization: 'Bot ' + botToken }, signal: AbortSignal.timeout(8000),
-          });
-          if (history.ok) {
-            const messages: unknown = await history.json();
-            const exists = Array.isArray(messages) && messages.some(m => {
-              const msg = m as { components?: { components?: { custom_id?: string }[] }[] };
-              return msg.components?.some(row => row.components?.some(c => c.custom_id === 'arcade_launch'));
-            });
-            if (exists) return { type: 4, data: { content: 'Объявление уже опубликовано в этом канале.', flags: 64 } };
-          }
-        } catch { /* history check is best-effort; posting still proceeds */ }
-      }
       const appId = config.ARCADE_DISCORD_CLIENT_ID;
-      if (!appId) return { type: 4, data: { content: 'Приложение не настроено.', flags: 64 } };
-      reply.send({ type: 5 }); // deferred channel message — must answer within 3s
+      if (!botToken || !appId || !interaction.channel_id) {
+        return { type: 4, data: { content: 'Публикация не настроена на сервере.', flags: 64 } };
+      }
+      if (await announcementExists(interaction.channel_id, botToken)) {
+        return { type: 4, data: { content: 'Объявление уже опубликовано в этом канале.', flags: 64 } };
+      }
+      // Acknowledge ephemerally first (Discord requires a response within 3s),
+      // then post and update the ephemeral reply with the outcome.
+      reply.send({ type: 4, data: { content: 'Публикую новость…', flags: 64 } });
       try {
-        await publishAnnouncementViaWebhook(appId, interaction.token);
+        await publishAnnouncementToChannel(interaction.channel_id, botToken);
         req.log.info({ event: 'news_published', channelId: interaction.channel_id }, 'announcement published via /news');
+        await patchNewsReply(appId, interaction.token, 'Новость опубликована.');
       } catch (error) {
         req.log.warn({ event: 'news_publish_failed', err: error instanceof Error ? error.message : String(error) }, '/news announcement publish failed');
-        const patch = await fetch(`https://discord.com/api/v10/webhooks/${appId}/${interaction.token}/messages/@original`, {
-          method: 'PATCH', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ content: 'Не удалось опубликовать объявление. Попробуйте позже.', allowed_mentions: { parse: [] } }),
-          signal: AbortSignal.timeout(8000),
-        }).catch(patchError => {
-          req.log.warn({ event: 'news_error_patch_failed', err: patchError instanceof Error ? patchError.message : String(patchError) }, 'failed to patch deferred /news reply');
-          return null;
-        });
-        if (patch && !patch.ok) req.log.warn({ event: 'news_error_patch_rejected', status: patch.status }, 'Discord rejected /news error patch');
+        await patchNewsReply(appId, interaction.token, 'Не удалось опубликовать объявление. Попробуйте позже.');
       }
       return reply;
     }
     return interactionResponse(interaction, guildId ?? null);
   });
   const adminIds = () => new Set((config.ARCADE_ADMIN_USER_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean));
+  const announcementExists = async (channelId: string, botToken: string): Promise<boolean> => {
+    try {
+      const history = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages?limit=20`, {
+        headers: { authorization: 'Bot ' + botToken }, signal: AbortSignal.timeout(8000),
+      });
+      if (!history.ok) return false;
+      const messages: unknown = await history.json();
+      return Array.isArray(messages) && messages.some(m => {
+        const msg = m as { components?: { components?: { custom_id?: string }[] }[] };
+        return msg.components?.some(row => row.components?.some(c => c.custom_id === 'arcade_launch'));
+      });
+    } catch { return false; }
+  };
   app.post('/api/admin/announce', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async req => {
     const player = await actor(req.headers.authorization);
     if (!adminIds().has(player.id)) throw new DomainError('FORBIDDEN', 'Только для администраторов');
     const channelId = config.ARCADE_ANNOUNCE_CHANNEL_ID;
     const botToken = config.ARCADE_DISCORD_BOT_TOKEN;
     if (!channelId || !botToken) throw new DomainError('GAME_UNAVAILABLE', 'Канал объявлений не настроен');
-    const headers = { authorization: 'Bot ' + botToken, 'content-type': 'application/json' };
     // Do not repost if the launch announcement is already present.
-    const history = await fetch('https://discord.com/api/v10/channels/' + channelId + '/messages?limit=20', { headers, signal: AbortSignal.timeout(8000) });
-    if (history.ok) {
-      const messages: unknown = await history.json();
-      const exists = Array.isArray(messages) && messages.some(m => {
-        const msg = m as { components?: { components?: { custom_id?: string }[] }[] };
-        return msg.components?.some(row => row.components?.some(c => c.custom_id === 'arcade_launch'));
-      });
-      if (exists) return { posted: false, reason: 'already_announced' };
+    if (await announcementExists(channelId, botToken)) return { posted: false, reason: 'already_announced' };
+    try {
+      await publishAnnouncementToChannel(channelId, botToken);
+    } catch {
+      throw new DomainError('GAME_UNAVAILABLE', 'Discord отклонил публикацию объявления');
     }
-    const response = await fetch('https://discord.com/api/v10/channels/' + channelId + '/messages', {
-      method: 'POST', headers,
-      body: JSON.stringify(announcementPayload()),
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) throw new DomainError('GAME_UNAVAILABLE', 'Discord отклонил публикацию объявления');
     return { posted: true };
   });
   app.post('/api/auth/challenge', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async () => ({ state: await sessions.challenge() }));

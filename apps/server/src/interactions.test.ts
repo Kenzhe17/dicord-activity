@@ -72,11 +72,11 @@ describe('interactions endpoint', () => {
     member: { user: { id: userId }, permissions: perms },
     data: { name: 'news' },
   });
-  it('answers /news for admins with a deferred response and posts via webhook', async () => {
-    const webhookCalls: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: { method?: string }) => {
+  it('answers /news for admins ephemerally and posts a separate channel message', async () => {
+    const calls: { url: string; method?: string | undefined; body?: { embeds?: { title?: string }[]; components?: unknown[] } | undefined }[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: { method?: string; body?: unknown }) => {
       const url = String(input);
-      webhookCalls.push(url + (init?.method ? ' ' + init.method : ''));
+      calls.push({ url, method: init?.method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       if (url.includes('/messages?limit=')) return new Response('[]', { status: 200 });
       return new Response('{"id":"m"}', { status: 200 });
     }));
@@ -84,19 +84,23 @@ describe('interactions endpoint', () => {
     const body = newsCmd('123456789012345678');
     const response = await app.inject({ method: 'POST', url: '/api/discord/interactions', headers: { 'content-type': 'application/json', ...sign(body) }, payload: body });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ type: 5 });
-    expect(webhookCalls.some(c => c.includes('/webhooks/1566376251185168394/news-token'))).toBe(true);
+    expect(response.json()).toMatchObject({ type: 4 }); // ephemeral only — no public "used /news"
+    const post = calls.find(c => c.method === 'POST' && c.url.includes('/channels/222222222222222222/messages'));
+    expect(post).toBeTruthy();
+    expect(post!.body!.embeds![0]!.title).toBe('r!z3 Arcade — Дурак');
+    expect(JSON.stringify(post!.body)).not.toContain('🃏');
+    // ephemeral reply is patched with the outcome
+    expect(calls.some(c => c.method === 'PATCH' && c.url.includes('/webhooks/') && c.url.includes('/messages/@original'))).toBe(true);
   });
-  it('denies /news to non-admins and guild admins pass via permissions bit', async () => {
+  it('denies /news to non-admins; permission-bit admins pass', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200 })));
     const { app } = await create();
     const denied = newsCmd('999999999999999999');
     const deniedRes = await app.inject({ method: 'POST', url: '/api/discord/interactions', headers: { 'content-type': 'application/json', ...sign(denied) }, payload: denied });
     expect(deniedRes.json()).toMatchObject({ type: 4 });
-    // permissions '8' = ADMINISTRATOR bit → allowed even outside allowlist
     const adminPerms = newsCmd('999999999999999999', '8');
     const allowed = await app.inject({ method: 'POST', url: '/api/discord/interactions', headers: { 'content-type': 'application/json', ...sign(adminPerms) }, payload: adminPerms });
-    expect(allowed.json()).toEqual({ type: 5 });
+    expect(allowed.json()).toMatchObject({ type: 4 });
   });
   it('fails closed when no public key is configured', async () => {
     const config = discordConfig();
@@ -126,7 +130,7 @@ describe('admin announce', () => {
     void sessions;
   });
   it('posts the announcement with the launch button for admins', async () => {
-    const posts: { url: string; body: { components?: unknown[]; content?: string } }[] = [];
+    const posts: { url: string; body: { embeds?: { title?: string }[]; components?: unknown[] } }[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: { body?: unknown }) => {
       const url = String(input);
       if (url.includes('/messages?limit=')) return new Response('[]', { status: 200 });
@@ -141,7 +145,8 @@ describe('admin announce', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ posted: true });
     expect(posts).toHaveLength(1);
-    expect(posts[0]!.body.content).toContain('Дурак');
+    expect(posts[0]!.body.embeds![0]!.title).toBe('r!z3 Arcade — Дурак');
+    expect(JSON.stringify(posts[0]!.body)).not.toContain('🃏');
     expect(JSON.stringify(posts[0]!.body.components)).toContain('arcade_launch');
   });
   it('does not repost when the announcement already exists', async () => {

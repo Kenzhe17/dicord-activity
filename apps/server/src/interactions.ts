@@ -71,23 +71,42 @@ export function interactionIsAdmin(interaction: DiscordInteraction, adminIds: Re
   return caller !== null && adminIds.has(caller);
 }
 
-export const ANNOUNCEMENT_CONTENT = 'активити Дурак 🃏\nНа сервере стала доступна собственная Discord-активность Дурак.\nРежимы: Подкидной и переводной\nИгроки: от 2 до 6\nСобирайте друзей и играйте прямо в Discord!\n-# Новые игры уже в разработке.';
-export function announcementPayload(): { content: string; components: unknown[] } {
+/** Announcement payload: a clean embed plus the launch button. No emojis. */
+export function announcementPayload(): { embeds: unknown[]; components: unknown[] } {
   return {
-    content: ANNOUNCEMENT_CONTENT,
-    components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Запустить r!z3 Arcade', emoji: { name: '🃏' }, custom_id: ARCADE_LAUNCH_CUSTOM_ID }] }],
+    embeds: [{
+      title: 'r!z3 Arcade — Дурак',
+      description: 'На сервере стала доступна собственная Discord-активность Дурак.',
+      color: 0x5865f2,
+      fields: [
+        { name: 'Режимы', value: 'Подкидной и переводной', inline: true },
+        { name: 'Игроки', value: 'от 2 до 6', inline: true },
+        { name: 'Запуск', value: 'Зайдите в голосовой канал и откройте Активности', inline: false },
+      ],
+      footer: { text: 'Новые игры уже в разработке' },
+    }],
+    components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Запустить r!z3 Arcade', custom_id: ARCADE_LAUNCH_CUSTOM_ID }] }],
   };
 }
 
-/** Posts the announcement through the interaction followup webhook — the
- * interaction token authorizes posting into the invoking channel, so no bot
- * token or channel id is needed. */
-export async function publishAnnouncementViaWebhook(applicationId: string, interactionToken: string): Promise<void> {
-  const response = await fetch(`https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}`, {
+/** Posts the announcement as a regular channel message via the bot token —
+ * completely separate from the interaction, so no "used /news" line appears. */
+export async function publishAnnouncementToChannel(channelId: string, botToken: string): Promise<void> {
+  const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { authorization: 'Bot ' + botToken, 'content-type': 'application/json' },
     body: JSON.stringify(announcementPayload()),
     signal: AbortSignal.timeout(8000),
   });
-  if (!response.ok) throw new Error('announcement webhook failed: ' + response.status);
+  if (!response.ok) throw new Error('announcement post failed: ' + response.status);
+}
+
+/** Edits the ephemeral /news reply after the channel post finishes. */
+export async function patchNewsReply(applicationId: string, interactionToken: string, content: string): Promise<void> {
+  await fetch(`https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}/messages/@original`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => {});
 }
