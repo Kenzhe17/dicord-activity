@@ -11,13 +11,13 @@ if (!token || !appId || !instanceId) {
   process.exit(1);
 }
 const headers = { authorization: 'Bot ' + token, accept: 'application/json' };
-const me = await fetch('https://discord.com/api/v10/oauth2/applications/@me', { headers });
+const me = await globalThis.fetch('https://discord.com/api/v10/oauth2/applications/@me', { headers });
 console.log('GET /oauth2/applications/@me ->', me.status);
 if (me.ok) {
   const app = await me.json();
   console.log('  application id:', app.id, app.id === appId ? '(matches ARCADE_DISCORD_CLIENT_ID)' : '(MISMATCH!)');
 } else { console.log('  body:', (await me.text()).slice(0, 300)); }
-const res = await fetch(`https://discord.com/api/v10/applications/${appId}/activity-instances/${encodeURIComponent(instanceId)}`, { headers });
+const res = await globalThis.fetch(`https://discord.com/api/v10/applications/${appId}/activity-instances/${encodeURIComponent(instanceId)}`, { headers });
 console.log('GET activity-instances ->', res.status);
 const text = await res.text();
 try {

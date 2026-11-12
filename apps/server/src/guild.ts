@@ -84,7 +84,7 @@ export class DiscordGuildVerifier implements GuildVerifier {
           headers: { authorization: 'Bot ' + this.botToken, accept: 'application/json' },
           signal: AbortSignal.timeout(8000),
         });
-      } catch (error) {
+      } catch {
         if (attempt < this.retryDelaysMs.length) { await sleep(this.retryDelaysMs[attempt]!); continue; }
         return this.reject('api_timeout', { step: 'instance', attempt });
       }

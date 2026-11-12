@@ -13,6 +13,11 @@ const schema = z.object({
   // issued inside this guild, verified server-side via the Activity Instances API.
   ARCADE_ALLOWED_GUILD_ID: z.string().regex(/^[0-9]{17,20}$/).default('1196165488565289012'),
   ARCADE_SERVER_INVITE_URL: z.string().max(300).optional(),
+  // Discord Interactions (announcement button → LAUNCH_ACTIVITY). The public
+  // key comes from the Developer Portal; it is not a secret.
+  ARCADE_DISCORD_PUBLIC_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
+  ARCADE_ANNOUNCE_CHANNEL_ID: z.string().regex(/^[0-9]{17,20}$/).optional(),
+  ARCADE_ADMIN_USER_IDS: z.string().max(2000).optional(),
   ARCADE_ENABLE_TEST_GAME: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
   ARCADE_SERVE_WEB: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
   ARCADE_ROOM_IDLE_MS: z.coerce.number().int().min(60000).default(1800000),

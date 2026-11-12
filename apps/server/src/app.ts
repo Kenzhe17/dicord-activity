@@ -22,6 +22,8 @@ import { EconomyBridge } from './economy';
 import type { BalanceInfo, StakesBridge } from './economy';
 import { DiscordGuildVerifier } from './guild';
 import type { GuildVerifier } from './guild';
+import { interactionResponse, interactionSchema, verifyDiscordSignature } from './interactions';
+import type { DiscordInteraction } from './interactions';
 
 export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: ({ getBalance(id: string): Promise<BalanceInfo | null> } & Partial<StakesBridge>) | null; discordCdnBase?: string; guildVerifier?: GuildVerifier | null } = {}) {
   if (!options.database && !config.ARCADE_DATABASE_URL) throw new Error('ARCADE_DATABASE_URL is required; no implicit production or memory fallback');
@@ -67,6 +69,17 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
       connectSrc: ["'self'", 'wss:'], frameAncestors: ['https://discord.com', 'https://*.discord.com', 'https://*.discordsays.com'],
     },
   } });
+  // Discord signs interactions over the exact raw body — keep a copy before
+  // the JSON parser consumes the stream (this route only).
+  app.addHook('preParsing', async (req, _reply, payload) => {
+    if (String(req.url).split('?')[0] !== '/api/discord/interactions') return payload;
+    const chunks: Buffer[] = [];
+    for await (const chunk of payload) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const raw = Buffer.concat(chunks);
+    (req as typeof req & { rawBody?: string }).rawBody = raw.toString('utf8');
+    const { Readable } = await import('node:stream');
+    return Readable.from(raw);
+  });
   const allowedOrigin = new URL(config.ARCADE_ORIGIN).origin;
   app.addHook('onRequest', async (req, reply) => {
     if (req.headers.origin && req.headers.origin !== allowedOrigin) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Origin запрещён' } });
@@ -209,6 +222,50 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     return { enabled: true, available: true, balance: balance.exists ? balance.balance : 0, walletExists: balance.exists };
   });
   app.get('/api/games', async () => games.list());
+  // Discord Interactions endpoint for the Arcade application. Public route —
+  // authenticity is proven by the Ed25519 signature, not a session.
+  app.post('/api/discord/interactions', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const publicKey = config.ARCADE_DISCORD_PUBLIC_KEY;
+    if (!publicKey) return reply.code(503).send({ error: { code: 'GAME_UNAVAILABLE', message: 'Interactions are not configured' } });
+    const signature = req.headers['x-signature-ed25519'];
+    const timestamp = req.headers['x-signature-timestamp'];
+    const rawBody = (req as typeof req & { rawBody?: string }).rawBody ?? '';
+    if (typeof signature !== 'string' || typeof timestamp !== 'string' || !verifyDiscordSignature(publicKey, timestamp, rawBody, signature)) {
+      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Invalid interaction signature' } });
+    }
+    const interaction = interactionSchema.parse(req.body) as DiscordInteraction;
+    return interactionResponse(interaction, guildId ?? null);
+  });
+  const ANNOUNCEMENT_CONTENT = 'активити Дурак 🃏\nНа сервере стала доступна собственная Discord-активность Дурак.\nРежимы: Подкидной и переводной\nИгроки: от 2 до 6\nСобирайте друзей и играйте прямо в Discord!\n-# Новые игры уже в разработке.';
+  const adminIds = () => new Set((config.ARCADE_ADMIN_USER_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean));
+  app.post('/api/admin/announce', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async req => {
+    const player = await actor(req.headers.authorization);
+    if (!adminIds().has(player.id)) throw new DomainError('FORBIDDEN', 'Только для администраторов');
+    const channelId = config.ARCADE_ANNOUNCE_CHANNEL_ID;
+    const botToken = config.ARCADE_DISCORD_BOT_TOKEN;
+    if (!channelId || !botToken) throw new DomainError('GAME_UNAVAILABLE', 'Канал объявлений не настроен');
+    const headers = { authorization: 'Bot ' + botToken, 'content-type': 'application/json' };
+    // Do not repost if the launch announcement is already present.
+    const history = await fetch('https://discord.com/api/v10/channels/' + channelId + '/messages?limit=20', { headers, signal: AbortSignal.timeout(8000) });
+    if (history.ok) {
+      const messages: unknown = await history.json();
+      const exists = Array.isArray(messages) && messages.some(m => {
+        const msg = m as { components?: { components?: { custom_id?: string }[] }[] };
+        return msg.components?.some(row => row.components?.some(c => c.custom_id === 'arcade_launch'));
+      });
+      if (exists) return { posted: false, reason: 'already_announced' };
+    }
+    const response = await fetch('https://discord.com/api/v10/channels/' + channelId + '/messages', {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        content: ANNOUNCEMENT_CONTENT,
+        components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Запустить r!z3 Arcade', emoji: { name: '🃏' }, custom_id: 'arcade_launch' }] }],
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) throw new DomainError('GAME_UNAVAILABLE', 'Discord отклонил публикацию объявления');
+    return { posted: true };
+  });
   app.post('/api/auth/challenge', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async () => ({ state: await sessions.challenge() }));
   app.post('/api/auth/dev', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async req => {
     if (config.ARCADE_AUTH_MODE !== 'mock' || config.ARCADE_ENV === 'production') throw new DomainError('FORBIDDEN', 'Локальная авторизация отключена');
