@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Clock3, Shield, Crown, WifiOff } from 'lucide-react';
+import { Clock3, Shield, Crown, WifiOff, Menu, DoorOpen } from 'lucide-react';
 import type { DurakView, DurakAction } from '@rize/durak';
 import type { MatchView, RoomView } from '@rize/shared';
 import { Button } from '@rize/ui';
@@ -9,13 +9,22 @@ import { useArcade } from '../store';
 import { PlayingCard, playingCardLabel } from './PlayingCard';
 import './durak.css';
 
-export function DurakTable({ match, room, busy, run, onForfeitExit }: { match: MatchView; room: RoomView; busy: boolean; run: (action: () => Promise<void>) => Promise<void>; onForfeitExit: () => void }) {
+interface ResultActions { ready: boolean; isHost: boolean; canStart: boolean; onToggleReady: () => void; onStart: () => void; onLeave: () => void }
+export function DurakTable({ match, room, busy, run, onForfeitExit, resultActions }: { match: MatchView; room: RoomView; busy: boolean; run: (action: () => Promise<void>) => Promise<void>; onForfeitExit: () => void; resultActions?: ResultActions | undefined }) {
   const { session, setMatch, preferences } = useArcade();
   const state = match.state as DurakView;
   const [selected, setSelected] = useState<number[]>([]), [target, setTarget] = useState<number | null>(null), [clock, setClock] = useState(Date.now());
-  const [confirming, setConfirming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false), [confirming, setConfirming] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 500); return () => clearInterval(timer); }, []);
-  useEffect(() => { setConfirming(false); }, [match.version]);
+  useEffect(() => { setConfirming(false); setMenuOpen(false); }, [match.version, match.status]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: PointerEvent) => { if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false); };
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('pointerdown', close); document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', key); };
+  }, [menuOpen]);
   const ownId = session?.player.id ?? '', ownTurn = state.actorId === ownId;
   const choices = state.legalActions;
   const picked = selected.filter(c => state.hand.includes(c));
@@ -37,8 +46,16 @@ export function DurakTable({ match, room, busy, run, onForfeitExit }: { match: M
   };
   const opponents = state.players.filter(p => p.id !== ownId);
   const phaseName = state.paused ? 'Пауза · ожидаем игроков' : ended ? 'Партия завершена' : ownTurn ? state.phase === 'defending' ? 'Ваша защита' : state.phase === 'taking' ? 'Можно подкинуть берущему' : 'Ваш ход' : 'Ходит ' + memberName(state.actorId);
+  const duration = match.createdAt && match.finishedAt ? Math.max(0, Math.round((Date.parse(match.finishedAt) - Date.parse(match.createdAt)) / 1000)) : null;
+  const fmtDuration = (seconds: number) => Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+  const standings = [...state.players].sort((a, b) => Number(a.out) - Number(b.out) || (match.result?.winners.includes(b.id) ? 1 : 0) - (match.result?.winners.includes(a.id) ? 1 : 0));
+  const statusOf = (id: string, out: boolean, forfeited: boolean) => match.result?.draw ? 'Ничья' : match.result?.winners.includes(id) ? 'Победитель' : forfeited ? 'Сдался' : out ? 'Проиграл' : '—';
   return <section className="durak-game" aria-label="Игровой стол Дурака" data-phase={state.phase} data-match-version={match.version}>
-    <div className="durak-toolbar"><div><span className="eyebrow">R!Z3 CARD CLUB</span><h2>{state.mode === 'transfer' ? 'Переводной дурак' : 'Подкидной дурак'}</h2></div><div className="toolbar-actions"><span className="round-label">Розыгрыш {state.bout}</span>{state.canSurrender && !ended && <Button disabled={busy} onClick={() => confirming ? void act({ type: 'surrender' }) : setConfirming(true)}>{confirming ? 'Точно сдаться?' : 'Сдаться'}</Button>}</div></div>
+    <div className="durak-toolbar"><div><span className="eyebrow">R!Z3 CARD CLUB</span><h2>{state.mode === 'transfer' ? 'Переводной дурак' : 'Подкидной дурак'}</h2></div><div className="toolbar-actions"><span className="round-label">Розыгрыш {state.bout}</span>{!ended && <div className="game-menu-wrap" ref={menuRef}><Button aria-expanded={menuOpen} onClick={() => setMenuOpen(o => !o)}><Menu size={14}/>Меню</Button>{menuOpen && <div className="game-menu" role="menu">
+      <div className="game-menu-players">{state.players.map(p => { const member = room.members.find(m => m.player.id === p.id); return <div className="game-menu-player" key={p.id}><span className="opponent-avatar">{member?.player.avatar ? <img src={avatarSource(member.player.avatar)} alt=""/> : memberName(p.id).slice(0, 1)}{!member?.connected && <WifiOff size={11}/>}</span><div><strong>{memberName(p.id)}{p.id === ownId ? ' (вы)' : ''}</strong><small>{p.out ? 'Вышел' : p.id === state.defenderId ? 'Защищается' : p.count + ' карт'}</small></div></div>; })}</div>
+      <p className="game-menu-rules">{state.mode === 'transfer' ? 'Переводной дурак: за beaten защитник может перевести атаку следующему игроку.' : 'Подкидной дурак: игроки могут подкидывать карты в пределах лимита.'} Козырь показан на столе.</p>
+      <div className="game-menu-actions">{state.canSurrender && <Button className="danger-button" disabled={busy} onClick={() => confirming ? void act({ type: 'surrender' }) : setConfirming(true)}>{confirming ? 'Точно сдаться? Партия продолжится без вас' : 'Сдаться'}</Button>}{state.forfeited && !ended && <Button onClick={onForfeitExit}><DoorOpen size={14}/>Покинуть комнату</Button>}</div>
+    </div>}</div>}</div></div>
     <div className="opponents">{opponents.map(p => {
       const member = room.members.find(m => m.player.id === p.id), active = state.actorId === p.id;
       return <div key={p.id} className={'opponent' + (active ? ' opponent-active' : '') + (p.out ? ' opponent-out' : '')}>
@@ -59,7 +76,12 @@ export function DurakTable({ match, room, busy, run, onForfeitExit }: { match: M
       })}</AnimatePresence>{!state.table.length && !ended && <div className="empty-table"><span className="table-diamond"/><p>{ownTurn ? 'Выберите карту для атаки' : 'Ожидаем первую карту'}</p></div>}</div>
       <div className="table-status"><span className={ownTurn ? 'turn-light active' : 'turn-light'}/><strong role="status">{phaseName}</strong>{!ended && !state.paused && <span className={'turn-clock' + (time <= 10 ? ' urgent' : '')}><Clock3 size={14}/>{time} c</span>}<small>{state.table.length} / {state.limit} атак</small></div>
     </div>
-    {ended ? <div className="durak-result" role="status"><Crown size={30}/><h2>{match.status === 'interrupted' ? 'Партия прервана' : state.result?.draw ? 'Ничья' : state.result?.losers.includes(ownId) ? 'Вы остались с картами' : 'Партия без поражения'}</h2><p>{match.status === 'interrupted' ? 'Состояние сохранено. Результат не начислен.' : 'Результат сохранён · рейтинговые очки не изменяются'}</p></div> : <>
+    {ended ? <div className="durak-result" role="status">
+      <Crown size={30}/><h2>{match.status === 'interrupted' ? 'Партия прервана' : state.result?.draw ? 'Ничья' : state.result?.losers.includes(ownId) ? 'Вы остались с картами' : 'Партия без поражения'}</h2>
+      <p>{match.status === 'interrupted' ? 'Состояние сохранено. Результат не начислен.' : 'Результат сохранён · рейтинговые очки не изменяются'}{duration !== null && ' · ' + fmtDuration(duration)}</p>
+      <div className="result-standings">{standings.map(p => <div className={'result-standing' + (match.result?.winners.includes(p.id) ? ' winner' : '')} key={p.id}><span className="opponent-avatar">{room.members.find(m => m.player.id === p.id)?.player.avatar ? <img src={avatarSource(room.members.find(m => m.player.id === p.id)!.player.avatar!)} alt=""/> : memberName(p.id).slice(0, 1)}</span><strong>{memberName(p.id)}{p.id === ownId ? ' (вы)' : ''}</strong><small>{statusOf(p.id, p.out, p.forfeited)}</small></div>)}</div>
+      {resultActions && <div className="button-row result-actions"><Button disabled={busy} onClick={resultActions.onToggleReady}>{resultActions.ready ? 'Отменить готовность' : 'Я готов — реванш'}</Button>{resultActions.isHost && <Button disabled={busy || resultActions.canStart} onClick={resultActions.onStart}>Начать партию</Button>}<Button onClick={resultActions.onLeave}>Выйти в меню</Button></div>}
+    </div> : <>
       <div className="own-hand-heading"><strong>{state.players.find(p => p.id === ownId)?.out ? state.forfeited ? 'Вы сдались · партия продолжается без вас' : 'Вы вышли · наблюдайте за партией' : 'Ваши карты'}</strong><span>{state.hand.length} карт · {ownTurn ? picked.length ? 'Выберите действие' : 'Подсвеченные карты доступны' : 'Ожидайте своего хода'}</span></div>
       <div className="own-hand" aria-label="Ваши карты"><AnimatePresence>{state.hand.map((c, i) => <motion.button key={c} layout className={'hand-card' + (picked.includes(c) ? ' selected' : '') + (selectable.has(c) ? ' playable' : '')} initial={preferences.reducedMotion ? false : { y: -50, opacity: 0 }} animate={{ y: picked.includes(c) ? -12 : 0, opacity: 1 }} exit={{ y: -65, opacity: 0 }} transition={{ duration: preferences.reducedMotion ? 0 : .18, delay: state.bout === 1 && state.lastEvent === 'deal' ? i * .035 : 0 }} aria-label={playingCardLabel(c)} aria-pressed={picked.includes(c)} data-hand-card={c} disabled={!selectable.has(c) || busy} onClick={() => {
         setTarget(null);
@@ -67,7 +89,6 @@ export function DurakTable({ match, room, busy, run, onForfeitExit }: { match: M
         setSelected(multi ? picked.includes(c) ? picked.filter(x => x !== c) : [...picked, c] : picked.includes(c) ? [] : [c]);
       }}><PlayingCard card={c}/></motion.button>)}</AnimatePresence></div>
       <div className="durak-controls">{ownTurn && !state.paused ? <>{button('attack', 'Атаковать')}{button('defend', 'Защититься')}{button('transfer', 'Перевести')}{button('throw', 'Подкинуть')}{button('take', 'Взять')}{button('pass', state.phase === 'taking' ? 'Не подкидывать' : 'Бито / не подкидываю')}{picked.length > 0 && <button className="text-button" onClick={() => { setSelected([]); setTarget(null); }}>Снять выбор</button>}</> : <p>{phaseName}</p>}</div>
-      {state.forfeited && !ended && <div className="button-row"><Button onClick={onForfeitExit}>Покинуть комнату</Button></div>}
       {ownTurn && choices.some(a => a.type === 'defend') && <p className="card-hint">Выберите карту в руке, затем карту атаки на столе и нажмите «Защититься».</p>}
     </>}
   </section>;

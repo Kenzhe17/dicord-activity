@@ -192,7 +192,7 @@ export class PlatformService {
     const row = await this.db.matchSnapshot.findUnique({ where: { id }, include: { participants: { where: { playerId: actorId } } } });
     if (!row || row.participants.length === 0) throw new DomainError('FORBIDDEN', 'Матч недоступен');
     const runtime = restoreMatch(this.games.getModule(row.gameId), row.state);
-    return { matchId: id, roomId: row.roomId, gameId: row.gameId, status: row.status, createdAt: row.createdAt.toISOString(), ...runtime.view(actorId), result: runtime.result() };
+    return { matchId: id, roomId: row.roomId, gameId: row.gameId, status: row.status, createdAt: row.createdAt.toISOString(), finishedAt: row.finishedAt?.toISOString(), ...runtime.view(actorId), result: runtime.result() };
   }
   async action(actorId: string, raw: unknown): Promise<MatchView> {
     const envelope = actionEnvelopeSchema.parse(raw);
