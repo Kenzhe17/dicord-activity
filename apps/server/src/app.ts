@@ -7,7 +7,8 @@ import helmet from '@fastify/helmet';
 import staticFiles from '@fastify/static';
 import { Server } from 'socket.io';
 import { z, ZodError } from 'zod';
-import { DomainError, createRoomSchema, actionEnvelopeSchema } from '@rize/shared';
+import { DomainError, createRoomSchema, actionEnvelopeSchema, isDiscordInviteUrl } from '@rize/shared';
+import type { AuthSession } from '@rize/discord';
 import type { ClientToServerEvents, ServerToClientEvents, Reply } from '@rize/shared';
 import { createArcadeDatabase } from '@rize/database';
 import type { PrismaClient } from '@rize/database';
@@ -19,8 +20,10 @@ import { PersistentSessions, requestSchema } from './persistence';
 import { PlatformService } from './platform';
 import { EconomyBridge } from './economy';
 import type { BalanceInfo, StakesBridge } from './economy';
+import { DiscordGuildVerifier } from './guild';
+import type { GuildVerifier } from './guild';
 
-export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: ({ getBalance(id: string): Promise<BalanceInfo | null> } & Partial<StakesBridge>) | null; discordCdnBase?: string } = {}) {
+export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: ({ getBalance(id: string): Promise<BalanceInfo | null> } & Partial<StakesBridge>) | null; discordCdnBase?: string; guildVerifier?: GuildVerifier | null } = {}) {
   if (!options.database && !config.ARCADE_DATABASE_URL) throw new Error('ARCADE_DATABASE_URL is required; no implicit production or memory fallback');
   const db = options.database ?? createArcadeDatabase(config.ARCADE_DATABASE_URL ?? '');
   try { await db.$connect(); await db.player.count(); }
@@ -34,6 +37,21 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   const rooms = new PlatformService(db, games, Date.now, economy && typeof (economy as StakesBridge).escrow === 'function' ? economy as StakesBridge : null, config.ARCADE_STAKES_ENABLED);
   const sessions = new PersistentSessions(db);
   const oauth = options.oauth ?? (config.ARCADE_AUTH_MODE === 'discord' ? new DiscordOAuthProvider(config.ARCADE_DISCORD_CLIENT_ID ?? '', config.ARCADE_DISCORD_CLIENT_SECRET ?? '') : undefined);
+  // Single-guild lockdown applies to Discord-authenticated sessions only;
+  // mock/dev auth stays available for local development and tests.
+  const guildId = config.ARCADE_ALLOWED_GUILD_ID;
+  const guildRestricted = config.ARCADE_AUTH_MODE === 'discord' && !!guildId;
+  const guildVerifier: GuildVerifier | null = options.guildVerifier !== undefined
+    ? options.guildVerifier
+    : guildRestricted && config.ARCADE_DISCORD_BOT_TOKEN && guildId
+      ? new DiscordGuildVerifier(config.ARCADE_DISCORD_BOT_TOKEN, guildId)
+      : null;
+  function guardSession(session: AuthSession): void {
+    if (!guildRestricted) return;
+    if (!guildId || session.guildId !== guildId || !session.instanceId) {
+      throw new DomainError('GUILD_RESTRICTED', 'Arcade доступна только на официальном сервере r!z3');
+    }
+  }
   await app.register(rateLimit, { max: 180, timeWindow: '1 minute', keyGenerator: async req => {
     // Discord/NAT users may share a proxy IP. Only verified identities get separate buckets.
     if (!req.url.startsWith('/api/auth/') && req.headers.authorization) {
@@ -56,7 +74,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   app.setErrorHandler((error, req, reply) => {
     if (error instanceof ZodError) return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'Некорректные параметры запроса' } });
     if (error instanceof DomainError) {
-      const status = { INVALID_INPUT: 400, UNAUTHORIZED: 401, FORBIDDEN: 403, NOT_FOUND: 404, CONFLICT: 409, GAME_UNAVAILABLE: 409, RATE_LIMITED: 429 }[error.code];
+      const status = { INVALID_INPUT: 400, UNAUTHORIZED: 401, FORBIDDEN: 403, GUILD_RESTRICTED: 403, NOT_FOUND: 404, CONFLICT: 409, GAME_UNAVAILABLE: 409, RATE_LIMITED: 429 }[error.code];
       return reply.code(status).send({ error: { code: error.code, message: error.message } });
     }
     if (typeof error === 'object' && error !== null && 'statusCode' in error && typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500) return reply.code(error.statusCode).send({ error: { code: error.statusCode === 429 ? 'RATE_LIMITED' : 'INVALID_INPUT', message: 'Запрос отклонён' } });
@@ -64,7 +82,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     return reply.code(500).send({ error: { code: 'INTERNAL', message: 'Внутренняя ошибка сервера' } });
   });
   function tokenFrom(authorization: string | undefined): string | undefined { return authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined; }
-  async function actor(authorization: string | undefined) { return (await sessions.get(tokenFrom(authorization))).player; }
+  async function actor(authorization: string | undefined) { const session = await sessions.get(tokenFrom(authorization)); guardSession(session); return session.player; }
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
     maxHttpBufferSize: 16384, cors: { origin: allowedOrigin },
     allowRequest: (req, done) => done(null, req.headers.origin === allowedOrigin),
@@ -109,7 +127,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   }
   io.use((socket, next) => {
     void (async () => {
-      try { const token = z.string().min(1).max(128).parse(socket.handshake.auth['token']); await sessions.get(token); next(); }
+      try { const token = z.string().min(1).max(128).parse(socket.handshake.auth['token']); guardSession(await sessions.get(token)); next(); }
       catch { app.log.info({ event: 'realtime_auth_rejected' }, 'Realtime authentication rejected'); next(new Error('UNAUTHORIZED')); }
     })();
   });
@@ -181,7 +199,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     try { await db.$queryRaw`SELECT 1`; return { status: 'ok', persistence: 'postgresql', databaseConnected: true }; }
     catch { return reply.code(503).send({ status: 'not_ready', persistence: 'postgresql', databaseConnected: false }); }
   });
-  app.get('/api/config', async () => ({ authMode: config.ARCADE_AUTH_MODE, clientId: config.ARCADE_DISCORD_CLIENT_ID ?? null, persistence: 'postgresql', testGame: config.ARCADE_ENABLE_TEST_GAME, economy: !!economy }));
+  app.get('/api/config', async () => ({ authMode: config.ARCADE_AUTH_MODE, clientId: config.ARCADE_DISCORD_CLIENT_ID ?? null, persistence: 'postgresql', testGame: config.ARCADE_ENABLE_TEST_GAME, economy: !!economy, allowedGuildId: guildRestricted ? guildId : null, serverInviteUrl: isDiscordInviteUrl(config.ARCADE_SERVER_INVITE_URL) ? config.ARCADE_SERVER_INVITE_URL : null }));
   app.get('/api/economy/balance', async req => {
     const player = await actor(req.headers.authorization);
     if (!economy) return { enabled: false };
@@ -198,17 +216,33 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   });
   app.post('/api/auth/discord', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async req => {
     if (config.ARCADE_AUTH_MODE !== 'discord' || !oauth) throw new DomainError('FORBIDDEN', 'Discord авторизация не настроена');
-    const { code, state } = z.object({ code: z.string().min(1).max(2048), state: z.string().min(32).max(128) }).strict().parse(req.body);
+    const { code, state, instanceId, guildId: claimedGuildId } = z.object({
+      code: z.string().min(1).max(2048), state: z.string().min(32).max(128),
+      instanceId: z.string().min(1).max(200).optional(),
+      guildId: z.string().max(40).optional(),
+    }).strict().parse(req.body);
     await sessions.consumeChallenge(state);
     const verified = await oauth.authenticate(code);
     if (verified.player.id.startsWith('dev:')) throw new DomainError('UNAUTHORIZED', 'Недопустимая Discord identity');
+    let binding: { guildId: string; instanceId: string } | undefined;
+    if (guildRestricted) {
+      // Client-supplied guildId is never trusted: the Activity instance is
+      // re-verified against Discord's API with the application bot token.
+      if (!guildVerifier || !instanceId) throw new DomainError('GUILD_RESTRICTED', 'Не удалось подтвердить сервер Activity');
+      const confirmation = await guildVerifier.verify({ applicationId: config.ARCADE_DISCORD_CLIENT_ID ?? '', instanceId, userId: verified.player.id });
+      if (!confirmation || confirmation.guildId !== guildId || (claimedGuildId !== undefined && claimedGuildId !== guildId)) {
+        throw new DomainError('GUILD_RESTRICTED', 'Arcade доступна только на официальном сервере r!z3');
+      }
+      binding = { guildId: confirmation.guildId, instanceId: confirmation.instanceId };
+    }
     const old = tokenFrom(req.headers.authorization);
     if (old) await sessions.revoke(old);
-    return { ...await sessions.create(verified.player), accessToken: verified.accessToken };
+    return { ...await sessions.create(verified.player, binding), accessToken: verified.accessToken };
   });
   app.get('/api/me', async req => actor(req.headers.authorization));
   app.get('/api/bootstrap', async req => {
     const session = await sessions.get(tokenFrom(req.headers.authorization));
+    guardSession(session);
     const room = await rooms.activeRoom(session.player.id);
     await sessions.recovery(session.player.id, 'session_resumed', room?.id, room?.matchId ?? undefined);
     return { session, room, match: room?.matchId ? await rooms.match(room.matchId, session.player.id).catch(() => null) : null, preferences: await sessions.preferences(session.player.id) };

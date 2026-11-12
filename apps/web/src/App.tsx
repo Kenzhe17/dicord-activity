@@ -7,18 +7,19 @@ import type { AuthSession } from '@rize/discord';
 import type { ActivityContext, ActivityClient } from '@rize/discord/client';
 import type { GameInfo, RoomView, RoomSummary, ClientToServerEvents, ServerToClientEvents, Preferences, MatchView } from '@rize/shared';
 import { Button, Panel } from '@rize/ui';
-import { api, post, proxyPrefix } from './api';
+import { api, post, proxyPrefix, ApiError } from './api';
 import { Avatar } from './components/Avatar';
 import { useArcade, storedToken } from './store';
 import { PlayerPages } from './components/PlayerPages';
 import { LegalPage } from './components/LegalPages';
 import { Lobby } from './components/Lobby';
 import { BalanceNote } from './components/BalanceNote';
+import { GuildRestrictedScreen } from './components/GuildRestrictedScreen';
 import { connectRoom } from './realtime';
 import { PresenceManager, describePresence } from './presence';
 import { parseRoomInviteCode } from './roomAccess';
 
-interface PublicConfig { authMode: 'disabled' | 'mock' | 'discord'; clientId: string | null; persistence: string; testGame: boolean; economy?: boolean }
+interface PublicConfig { authMode: 'disabled' | 'mock' | 'discord'; clientId: string | null; persistence: string; testGame: boolean; economy?: boolean; allowedGuildId?: string | null; serverInviteUrl?: string | null }
 interface Bootstrap { session: AuthSession; room: RoomView | null; match: MatchView | null; preferences: Preferences }
 const icons = { durak: Spade, uno: Palette, mafia: VenetianMask, sandbox: FlaskConical };
 const navigation = [['home', 'Главная', House], ['games', 'Библиотека', Layers3], ['rooms', 'Комнаты', Users], ['profile', 'Профиль', UserRound], ['history', 'История', History], ['rankings', 'Рейтинги', Trophy], ['settings', 'Настройки', Settings]] as const;
@@ -45,6 +46,7 @@ export function App() {
   const [error, setError] = useState('');
   const [connection, setConnection] = useState('Не подключено');
   const [context, setContext] = useState<ActivityContext | null>(null);
+  const [restricted, setRestricted] = useState(false);
   const activity = useRef<ActivityClient | null>(null);
   const presence = useRef<PresenceManager | null>(null);
   const started = useRef(false);
@@ -60,7 +62,12 @@ export function App() {
     try { await action(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось выполнить действие'); } finally { setBusy(false); }
   }, []);
   async function restore() {
-    const value = await api<Bootstrap>('/bootstrap');
+    let value: Bootstrap;
+    try { value = await api<Bootstrap>('/bootstrap'); }
+    catch (reason) {
+      if (reason instanceof ApiError && reason.code === 'GUILD_RESTRICTED') { setRestricted(true); return; }
+      throw reason;
+    }
     setSession(value.session); setRoom(value.room); setMatch(value.match); setPreferences(value.preferences);
     if (value.room && ['home', 'room'].includes(currentRoute())) navigate('room');
   }
@@ -69,9 +76,13 @@ export function App() {
     if (!new URLSearchParams(location.search).has('frame_id')) throw new Error('Откройте Arcade как Activity внутри Discord');
     const { getActivityClient } = await import('@rize/discord/client');
     activity.current = getActivityClient(settings.clientId);
+    // Guild gate runs before any authorization: wrong server, DM or external
+    // browser never reaches the OAuth exchange or game data.
+    if (settings.allowedGuildId && !(await activity.current.checkGuild(settings.allowedGuildId))) { setRestricted(true); return; }
     const { state } = await post<{ state: string }>('/auth/challenge');
-    const value = await activity.current.login(state,
-      (code, nonce) => post('/auth/discord', { code, state: nonce }),
+    const client = activity.current;
+    const value = await client.login(state,
+      (code, nonce) => post('/auth/discord', { code, state: nonce, instanceId: client.instanceId }),
       token => api('/session', { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }),
       setContext,
     );
@@ -109,7 +120,7 @@ export function App() {
     void run(async () => {
       const [list, settings] = await Promise.all([api<GameInfo[]>('/games'), api<PublicConfig>('/config')]);
       setGames(list); setConfig(settings);
-      if (settings.authMode === 'discord' && new URLSearchParams(location.search).has('frame_id')) { await discordLogin(settings); await applyShareInvite(); }
+      if (settings.authMode === 'discord' && new URLSearchParams(location.search).has('frame_id')) { await discordLogin(settings); if (useArcade.getState().session) await applyShareInvite(); }
       else if (storedToken()) await restore();
     });
   }, []);
@@ -154,6 +165,8 @@ export function App() {
     return <motion.button key={game.id} className={'game-card game-' + game.id} initial={preferences.reducedMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }} onClick={() => navigate('game/' + game.id)}><div className="game-art"><span className="game-number">0{index + 1}</span><Icon size={80} strokeWidth={1}/><span className="game-tag">{game.status === 'planned' ? 'СКОРО' : game.id === 'sandbox' ? 'DEV · ТЕСТ' : 'ИГРАТЬ'}</span></div><div className="game-copy"><h3>{game.name}<ArrowUpRight size={20}/></h3><p>{game.description}</p><span><Users size={14}/>{game.minPlayers}–{game.maxPlayers} игроков</span></div></motion.button>;
   })}</div></section>;
   const lobby = page === 'room' && room ? <Lobby games={games} run={run} busy={busy} onLeft={() => navigate('rooms')} discordInvite={config?.authMode === 'discord' && session ? { share: shareRoomInvite, channel: channelInvite } : undefined}/> : null;
+  const openExternalLink = (url: string) => { const client = activity.current; if (client) void client.openExternalLink(url).catch(() => {}); else window.open(url, '_blank', 'noopener'); };
+  if (restricted) return <GuildRestrictedScreen inviteUrl={config?.serverInviteUrl ?? null} guildId={config?.allowedGuildId ?? null} onInvite={openExternalLink}/>;
   if (immersive) return <MotionConfig reducedMotion={preferences.reducedMotion ? 'always' : 'user'}><div className="immersive-shell"><main className="immersive-main">
     <header className="game-header"><span className="brand-mark game-brand">r!<span className="brand-mark-z3">z3</span></span><strong>{durakMode} дурак</strong><span className="game-header-meta">{room?.name}</span><span className="connection game-header-connection"><Radio size={13}/>{connection}</span></header>
     {error && <div role="alert" className="error">{error}<button aria-label="Закрыть сообщение" onClick={() => setError('')}>×</button></div>}

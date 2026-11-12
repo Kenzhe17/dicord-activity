@@ -12,6 +12,7 @@ function fixture() {
       getInstanceConnectedParticipants: vi.fn(async () => ({ participants: [{ id: player.id, username: 'Participant' }] })),
       shareLink: vi.fn(async () => ({ success: true, didCopyLink: false, didSendMessage: true })),
       openInviteDialog: vi.fn(async () => ({})),
+      openExternalLink: vi.fn(async () => ({})),
       setActivity: vi.fn(async () => ({})),
     },
     subscribe: vi.fn(async () => {}), unsubscribe: vi.fn(async () => {}),
@@ -46,5 +47,19 @@ describe('Activity integration', () => {
     await client.login('new-nonce', exchange, revoke, updates);
     expect(sdk.unsubscribe).toHaveBeenCalledTimes(1);
     expect(updates).toHaveBeenLastCalledWith(expect.objectContaining({ participantsAvailable: false }));
+  });
+  it('checkGuild compares the SDK guild after ready and treats missing guild as restricted', async () => {
+    const { sdk, client } = fixture();
+    expect(await client.checkGuild('guild')).toBe(true);
+    sdk.guildId = null;
+    expect(await client.checkGuild('guild')).toBe(false);
+    sdk.guildId = 'other';
+    expect(await client.checkGuild('guild')).toBe(false);
+    expect(sdk.ready).toHaveBeenCalled();
+  });
+  it('openExternalLink forwards the URL to the SDK command', async () => {
+    const { sdk, client } = fixture();
+    await client.openExternalLink('https://discord.gg/example');
+    expect(sdk.commands.openExternalLink).toHaveBeenCalledWith({ url: 'https://discord.gg/example' });
   });
 });

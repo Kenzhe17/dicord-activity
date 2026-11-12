@@ -17,21 +17,21 @@ export function atomic<T>(db: PrismaClient, fn: (tx: Tx) => Promise<T>): Promise
 }
 export class PersistentSessions {
   constructor(private readonly db: PrismaClient, private readonly now = Date.now, private readonly ttl = 86400000) {}
-  async create(player: Player): Promise<AuthSession> {
+  async create(player: Player, binding?: { guildId: string; instanceId: string }): Promise<AuthSession> {
     const verified = playerSchema.parse(player);
     const token = randomBytes(32).toString('base64url');
     const expiresAt = this.now() + this.ttl;
     await this.db.$transaction(async tx => {
       await tx.player.upsert({ where: { discordId: verified.id }, create: { discordId: verified.id, name: verified.name, username: verified.username ?? verified.name, avatar: verified.avatar }, update: { name: verified.name, username: verified.username ?? verified.name, avatar: verified.avatar } });
-      await tx.authSession.create({ data: { tokenHash: hash(token), playerId: verified.id, expiresAt: new Date(expiresAt) } });
+      await tx.authSession.create({ data: { tokenHash: hash(token), playerId: verified.id, expiresAt: new Date(expiresAt), ...(binding ? { guildId: binding.guildId, instanceId: binding.instanceId } : {}) } });
     });
-    return { token, expiresAt, player: verified };
+    return { token, expiresAt, player: verified, ...(binding ? { guildId: binding.guildId, instanceId: binding.instanceId } : {}) };
   }
   async get(token: string | undefined): Promise<AuthSession> {
     if (!token || token.length > 128) throw new DomainError('UNAUTHORIZED', 'Необходима авторизация');
     const session = await this.db.authSession.findUnique({ where: { tokenHash: hash(token) }, include: { player: true } });
     if (!session || session.revokedAt || session.expiresAt.getTime() <= this.now()) throw new DomainError('UNAUTHORIZED', 'Сессия истекла. Войдите снова');
-    return { token, expiresAt: session.expiresAt.getTime(), player: { id: session.playerId, name: session.player.name, username: session.player.username, avatar: session.player.avatar } };
+    return { token, expiresAt: session.expiresAt.getTime(), player: { id: session.playerId, name: session.player.name, username: session.player.username, avatar: session.player.avatar }, guildId: session.guildId, instanceId: session.instanceId };
   }
   async revoke(token: string): Promise<void> {
     await this.db.authSession.updateMany({ where: { tokenHash: hash(token), revokedAt: null }, data: { revokedAt: new Date(this.now()) } });

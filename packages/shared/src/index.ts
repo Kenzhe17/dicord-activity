@@ -17,11 +17,14 @@ export const actionEnvelopeSchema = z.object({
   requestId: z.uuid(), expectedVersion: z.number().int().nonnegative(), action: z.unknown(),
 }).strict();
 export type ActionEnvelope = z.infer<typeof actionEnvelopeSchema>;
-export type ErrorCode = 'INVALID_INPUT' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'GAME_UNAVAILABLE' | 'RATE_LIMITED';
+export type ErrorCode = 'INVALID_INPUT' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'GUILD_RESTRICTED' | 'NOT_FOUND' | 'CONFLICT' | 'GAME_UNAVAILABLE' | 'RATE_LIMITED';
 export class DomainError extends Error {
   constructor(public readonly code: ErrorCode, message: string) { super(message); this.name = 'DomainError'; }
 }
 export type Reply<T> = { ok: true; data: T } | { ok: false; error: { code: ErrorCode; message: string } };
+/** Only genuine Discord invite links may be offered as the "join server" CTA. */
+export const discordInviteUrlSchema = z.string().regex(/^https:\/\/(?:discord\.gg|discord\.com\/invite|discordapp\.com\/invite|discordapp\.com\/servers)\/[A-Za-z0-9-]{1,64}\/?$/);
+export const isDiscordInviteUrl = (value: string | null | undefined): value is string => !!value && discordInviteUrlSchema.safeParse(value).success;
 export const roomViewSchema = z.object({
   id: z.string(), name: z.string(), gameId: z.string(), hostId: z.string(), visibility: z.enum(['public', 'private']),
   members: z.array(z.object({ player: playerSchema, ready: z.boolean(), connected: z.boolean().optional() })),

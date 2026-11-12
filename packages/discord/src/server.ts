@@ -7,10 +7,10 @@ import type { AuthProvider, AuthSession } from './index';
 export class SessionStore {
   private readonly sessions = new Map<string, AuthSession>();
   constructor(private readonly now = Date.now, private readonly ttl = 3_600_000, private readonly limit = 10000) {}
-  create(player: Player): AuthSession {
+  create(player: Player, binding?: { guildId: string; instanceId: string }): AuthSession {
     this.prune();
     if (this.sessions.size >= this.limit) throw new DomainError('RATE_LIMITED', 'Лимит сессий достигнут');
-    const session = { token: randomBytes(32).toString('base64url'), player: playerSchema.parse(player), expiresAt: this.now() + this.ttl };
+    const session = { token: randomBytes(32).toString('base64url'), player: playerSchema.parse(player), expiresAt: this.now() + this.ttl, ...(binding ? { guildId: binding.guildId, instanceId: binding.instanceId } : {}) };
     this.sessions.set(session.token, session);
     return structuredClone(session);
   }

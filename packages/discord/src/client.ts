@@ -15,6 +15,7 @@ export interface ActivitySdk {
     getInstanceConnectedParticipants(): Promise<{ participants: Participant[] }>;
     shareLink(input: { message: string; custom_id?: string }): Promise<{ success: boolean; didCopyLink: boolean; didSendMessage: boolean }>;
     openInviteDialog(): Promise<unknown>;
+    openExternalLink(input: { url: string }): Promise<unknown>;
     setActivity(input: { activity: Record<string, unknown> | null }): Promise<unknown>;
   };
   subscribe(event: 'ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE', listener: (data: { participants: Participant[] }) => void): Promise<unknown>;
@@ -66,6 +67,17 @@ export class ActivityClient {
       await timeout(subscription, 4000);
     } catch { await this.dispose(); onContext(context); }
     return { token: session.token, expiresAt: session.expiresAt, player: session.player };
+  }
+  /** Resolves after sdk.ready() and reports whether this Activity instance runs
+   * inside the allowed guild. A missing guildId (DM, group DM, external browser)
+   * is always treated as restricted. */
+  async checkGuild(allowedGuildId: string): Promise<boolean> {
+    await timeout(this.sdk.ready());
+    return this.sdk.guildId === allowedGuildId;
+  }
+  get instanceId(): string { return this.sdk.instanceId; }
+  async openExternalLink(url: string): Promise<unknown> {
+    return timeout(this.sdk.commands.openExternalLink({ url }));
   }
   get customId(): string | null { return this.sdk.customId ?? null; }
   async shareLink(input: { message: string; custom_id?: string }): Promise<{ success: boolean; didCopyLink: boolean; didSendMessage: boolean }> {

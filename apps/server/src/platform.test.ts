@@ -152,17 +152,17 @@ describe('persistent platform', () => {
   it('consumes OAuth challenges once, ignores spoofed identity and resumes the same Discord profile', async () => {
     const id = '123456789' + String(Date.now()).slice(-9);
     const config = loadConfig({ ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'discord', ARCADE_DATABASE_URL: process.env['ARCADE_TEST_DATABASE_URL'], ARCADE_DISCORD_CLIENT_ID: '123456789012345678', ARCADE_DISCORD_CLIENT_SECRET: 'test-only' });
-    const instance = await buildApp(config, { logger: false, oauth: { authenticate: async () => ({ player: { id, name: 'Verified', avatar: null }, accessToken: 'test-only' }) } });
+    const instance = await buildApp(config, { logger: false, oauth: { authenticate: async () => ({ player: { id, name: 'Verified', avatar: null }, accessToken: 'test-only' }) }, guildVerifier: { verify: async () => ({ guildId: '1196165488565289012', instanceId: 'i-test' }) } });
     running.push(instance);
     const challenge = await instance.sessions.challenge();
     const denied = await instance.app.inject({ method: 'POST', url: '/api/auth/discord', payload: { code: 'test-code', state: challenge, userId: 'spoof' } });
     expect(denied.statusCode).toBe(400);
-    const response = await instance.app.inject({ method: 'POST', url: '/api/auth/discord', payload: { code: 'test-code', state: challenge } });
+    const response = await instance.app.inject({ method: 'POST', url: '/api/auth/discord', payload: { code: 'test-code', state: challenge, instanceId: 'i-test' } });
     expect(response.statusCode).toBe(200);
     expect(response.json().player.id).toBe(id);
-    expect((await instance.app.inject({ method: 'POST', url: '/api/auth/discord', payload: { code: 'test-code', state: challenge } })).statusCode).toBe(401);
+    expect((await instance.app.inject({ method: 'POST', url: '/api/auth/discord', payload: { code: 'test-code', state: challenge, instanceId: 'i-test' } })).statusCode).toBe(401);
     const next = await instance.sessions.challenge();
-    await instance.app.inject({ method: 'POST', url: '/api/auth/discord', headers: { authorization: 'Bearer ' + response.json().token }, payload: { code: 'new-code', state: next } });
+    await instance.app.inject({ method: 'POST', url: '/api/auth/discord', headers: { authorization: 'Bearer ' + response.json().token }, payload: { code: 'new-code', state: next, instanceId: 'i-test' } });
     await expect(instance.sessions.get(response.json().token)).rejects.toThrow();
     expect(await instance.db.player.count({ where: { discordId: id } })).toBe(1);
   });

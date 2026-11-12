@@ -8,6 +8,11 @@ const schema = z.object({
   ARCADE_DATABASE_URL: z.string().min(1).optional(),
   ARCADE_DISCORD_CLIENT_ID: z.string().regex(/^[0-9]{17,20}$/).optional(),
   ARCADE_DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
+  ARCADE_DISCORD_BOT_TOKEN: z.string().min(1).optional(),
+  // Single-guild lockdown: when set (Discord auth mode), sessions are only
+  // issued inside this guild, verified server-side via the Activity Instances API.
+  ARCADE_ALLOWED_GUILD_ID: z.string().regex(/^[0-9]{17,20}$/).default('1196165488565289012'),
+  ARCADE_SERVER_INVITE_URL: z.string().max(300).optional(),
   ARCADE_ENABLE_TEST_GAME: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
   ARCADE_SERVE_WEB: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
   ARCADE_ROOM_IDLE_MS: z.coerce.number().int().min(60000).default(1800000),

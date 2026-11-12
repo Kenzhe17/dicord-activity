@@ -26,6 +26,8 @@ model AuthSession {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime @default(now())
+  guildId String? @db.VarChar(40)
+  instanceId String? @db.VarChar(200)
   player Player @relation(fields: [playerId], references: [discordId], onDelete: Restrict)
   @@index([playerId, expiresAt])
   @@schema("arcade")
