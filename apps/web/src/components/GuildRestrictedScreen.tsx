@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Lock, Copy, Check } from 'lucide-react';
 import { Button } from '@rize/ui';
+import { ArcadeLogo } from './ArcadeLogo';
 import { isDiscordInviteUrl } from '@rize/shared';
 
 /** Full-screen gate shown when the Activity runs outside the allowed guild
@@ -14,7 +15,7 @@ export function GuildRestrictedScreen({ inviteUrl, guildId, onInvite }: { invite
   }
   return <div className="restricted-shell">
     <div className="restricted-card">
-      <span className="brand-mark restricted-mark">r!</span>
+      <ArcadeLogo className="restricted-logo"/>
       <p className="eyebrow">R!Z3 ARCADE</p>
       <h1><Lock size={30}/> Доступ ограничен</h1>
       <p className="restricted-text">r!z3 Arcade доступна только на официальном Discord-сервере r!z3.</p>

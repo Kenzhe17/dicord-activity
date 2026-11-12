@@ -14,6 +14,7 @@ import { PlayerPages } from './components/PlayerPages';
 import { LegalPage } from './components/LegalPages';
 import { Lobby } from './components/Lobby';
 import { BalanceNote } from './components/BalanceNote';
+import { ArcadeLogo } from './components/ArcadeLogo';
 import { GuildRestrictedScreen } from './components/GuildRestrictedScreen';
 import { connectRoom } from './realtime';
 import { PresenceManager, describePresence } from './presence';
@@ -178,13 +179,13 @@ export function App() {
   const openExternalLink = (url: string) => { const client = activity.current; if (client) void client.openExternalLink(url).catch(() => {}); else window.open(url, '_blank', 'noopener'); };
   if (restricted) return <GuildRestrictedScreen inviteUrl={config?.serverInviteUrl ?? null} guildId={config?.allowedGuildId ?? null} onInvite={openExternalLink}/>;
   if (immersive) return <MotionConfig reducedMotion={preferences.reducedMotion ? 'always' : 'user'}><div className="immersive-shell"><main className="immersive-main">
-    <header className="game-header"><span className="brand-mark game-brand">r!<span className="brand-mark-z3">z3</span></span><strong>{durakMode} дурак</strong><span className="game-header-meta">{room?.name}</span><span className="connection game-header-connection"><Radio size={13}/>{connection}</span></header>
+    <header className="game-header"><ArcadeLogo className="game-brand"/><strong>{durakMode} дурак</strong><span className="game-header-meta">{room?.name}</span><span className="connection game-header-connection"><Radio size={13}/>{connection}</span></header>
     {error && <div role="alert" className="error">{error}<button aria-label="Закрыть сообщение" onClick={() => setError('')}>×</button></div>}
     {lobby}
   </main></div></MotionConfig>;
   return <MotionConfig reducedMotion={preferences.reducedMotion ? 'always' : 'user'}><div className={'shell' + (preferences.compactCards ? ' compact-cards' : '')}>
     <aside className="sidebar">
-      <a className="brand" href="#/home"><span className="brand-mark">r!<span className="brand-mark-z3">z3</span></span><span>r!z3 <b>ARCADE</b></span></a>
+      <a className="brand" href="#/home"><ArcadeLogo/><span>r!z3 <b>ARCADE</b></span></a>
       <span className="nav-label">ВАШ ИГРОВОЙ КЛУБ</span>
       <nav aria-label="Основная навигация">{navigation.map(([id, label, Icon]) => <button key={id} className={page === id ? 'nav-item active' : 'nav-item'} onClick={() => navigate(id)}><Icon size={19}/>{label}</button>)}</nav>
       <div className="sidebar-note"><span className="status-dot"/> R!Z3 SOCIAL CLUB<p>Общий стол начинается<br/>с хорошей компании.</p></div>
