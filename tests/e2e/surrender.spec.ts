@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import type { MatchView } from '../../packages/shared/src';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
@@ -37,6 +38,11 @@ test('surrender via in-game menu ends a two-player match with standings for ever
       for (const page of pages) await page.getByRole('button', { name: 'Я готов', exact: true }).click();
       await a.getByRole('button', { name: 'Начать партию' }).click();
       await Promise.all(pages.map(page => expect(page.locator('.own-hand .playing-card')).toHaveCount(6)));
+      const request = async <T>(page: Page, path: string, body?: unknown): Promise<T> => page.evaluate(async ({ path, body }) => {
+        const response = await fetch('/api' + path, { method: body ? 'POST' : 'GET', headers: { authorization: 'Bearer ' + sessionStorage.getItem('rize.arcade.session'), ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+        if (!response.ok) throw new Error('API ' + response.status); return response.json();
+      }, { path, body });
+      const firstMatchId = (await request<{ match: MatchView }>(a, '/bootstrap')).match.matchId;
       await a.screenshot({ path: 'tests/.artifacts/durak-menu-check.png' });
       await b.getByRole('button', { name: 'Меню', exact: true }).click();
       const menu = b.locator('.game-menu'); await expect(menu).toBeVisible();
@@ -51,8 +57,26 @@ test('surrender via in-game menu ends a two-player match with standings for ever
       }
       await expect(b.locator('.result-standing', { hasText: 'Сдался' })).toHaveCount(1);
       await expect(a.locator('.result-standing', { hasText: 'Победитель' })).toHaveCount(1);
-      await b.screenshot({ path: 'tests/.artifacts/durak-surrender-result.png', fullPage: true });
-      await a.getByRole('button', { name: 'Закрыть комнату' }).click();
+      await expect(b.locator('.durak-result h2')).toHaveText('Вы сдались');
+      await expect(a.locator('.durak-result h2')).toHaveText('Победа!');
+      const resultActions = a.locator('.result-actions');
+      await resultActions.getByRole('button', { name: 'Я готов — реванш' }).click();
+      await expect(resultActions.getByRole('button', { name: 'Отменить готовность' })).toBeVisible();
+      await expect(resultActions.getByRole('button', { name: 'Начать партию' })).toBeDisabled();
+      await b.locator('.result-actions').getByRole('button', { name: 'Я готов — реванш' }).click();
+      const startRematch = resultActions.getByRole('button', { name: 'Начать партию' });
+      await expect(startRematch).toBeEnabled();
+      await startRematch.click();
+      await expect(a.locator('.durak-result')).toHaveCount(0);
+      await Promise.all(pages.map(page => expect(page.locator('.own-hand .playing-card')).toHaveCount(6)));
+      const boots = await Promise.all(pages.map(p => request<{ match: MatchView | null }>(p, '/bootstrap')));
+      const secondMatchId = boots.find(x => x.match)?.match?.matchId;
+      expect(secondMatchId).toBeTruthy(); expect(secondMatchId).not.toBe(firstMatchId);
+      for (const page of pages) {
+        const history = await request<{ id: string }[]>(page, '/history');
+        expect(history.filter(h => h.id === firstMatchId)).toHaveLength(1);
+      }
+      await a.screenshot({ path: 'tests/.artifacts/durak-rematch.png' });
     } finally { await Promise.all(contexts.map(c => c.close())); }
   } finally {
     const exited = once(server, 'exit');
