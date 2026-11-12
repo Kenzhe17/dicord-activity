@@ -62,4 +62,21 @@ describe('Activity integration', () => {
     await client.openExternalLink('https://discord.gg/example');
     expect(sdk.commands.openExternalLink).toHaveBeenCalledWith({ url: 'https://discord.gg/example' });
   });
+  it('tracks the Rich Presence scope and supports re-authorization', async () => {
+    const { exchange, client, revoke } = fixture();
+    expect(client.hasRichPresenceScope).toBeNull();
+    await client.login('nonce', exchange, revoke, () => {});
+    expect(client.hasRichPresenceScope).toBe(true);
+    // Simulate a fallback login where the RPC scope authorize fails.
+    const { sdk: sdk2, exchange: ex2, revoke: rv2 } = fixture();
+    vi.mocked(sdk2.commands.authorize)
+      .mockRejectedValueOnce(new Error('scope denied'))
+      .mockResolvedValue({ code: 'identify-only' });
+    const client2 = new ActivityClient('client-id', sdk2);
+    await client2.login('nonce', ex2, rv2, () => {});
+    expect(client2.hasRichPresenceScope).toBe(false);
+    await client2.requestRichPresenceScope();
+    expect(client2.hasRichPresenceScope).toBe(true);
+    expect(sdk2.commands.authorize).toHaveBeenLastCalledWith(expect.objectContaining({ scope: ['identify', 'rpc.activities.write'] }));
+  });
 });

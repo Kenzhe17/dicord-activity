@@ -14,6 +14,36 @@ export interface PresenceActivity {
 
 export type PresenceSend = (activity: Record<string, unknown> | null) => Promise<unknown>;
 
+export type PresenceLogEvent =
+  | 'presence_initialized' | 'presence_scope_granted' | 'presence_scope_missing'
+  | 'presence_update_requested' | 'presence_update_succeeded' | 'presence_update_failed'
+  | 'presence_retry_scheduled' | 'presence_cleared';
+export type PresenceLog = (event: PresenceLogEvent, data?: Record<string, unknown>) => void;
+export type PresenceScopeState = 'unknown' | 'granted' | 'missing';
+export type PresenceErrorKind = 'permission' | 'payload' | 'rate_limit' | 'network' | 'unknown';
+
+const noopLog: PresenceLog = () => {};
+
+function errorText(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object') {
+    const e = error as { message?: unknown; code?: unknown; name?: unknown };
+    return [e.message, e.code, e.name].filter(v => typeof v === 'string' || typeof v === 'number').join(' ');
+  }
+  return '';
+}
+
+/** Best-effort classification of Discord RPC / transport failures. Never
+ * includes payload contents or tokens — only the error's own metadata. */
+export function classifyPresenceError(error: unknown): PresenceErrorKind {
+  const text = errorText(error).toLowerCase();
+  if (/scope|permission|denied|unauthor|forbidden|\b401\b|\b403\b|not allowed/.test(text)) return 'permission';
+  if (/rate|429|too many|throttl/.test(text)) return 'rate_limit';
+  if (/invalid|validation|payload|schema|malformed|zod/.test(text)) return 'payload';
+  if (/timeout|timed out|network|fetch|econn|enotfound|eai_again|socket|abort/.test(text)) return 'network';
+  return 'unknown';
+}
+
 const ASSETS = {
   main: 'arcade_main',
   durakLobby: 'durak_lobby',
@@ -22,21 +52,22 @@ const ASSETS = {
   uno: 'uno_main',
   mafia: 'mafia_main',
 } as const;
+/** Art asset keys that must exist in the Discord Developer Portal. Missing
+ * keys degrade to no image on Discord's side; they never break updates. */
+export const PRESENCE_ASSET_KEYS = Object.values(ASSETS);
 
 function toSdkPayload(input: PresenceActivity | null): Record<string, unknown> | null {
   if (!input) return null;
-  const activity: Record<string, unknown> = {
-    type: 0,
-    details: input.details,
-    assets: {
-      large_image: input.largeImage,
-      large_text: input.largeText ?? null,
-      small_image: input.smallImage ?? null,
-      small_text: input.smallText ?? null,
-    },
-  };
+  const assets: Record<string, string> = { large_image: input.largeImage };
+  if (input.largeText) assets['large_text'] = input.largeText;
+  if (input.smallImage) assets['small_image'] = input.smallImage;
+  if (input.smallText) assets['small_text'] = input.smallText;
+  const activity: Record<string, unknown> = { type: 0, details: input.details, assets };
   if (input.state !== undefined) activity['state'] = input.state;
-  if (input.party) activity['party'] = { id: input.party.id, size: [...input.party.size] };
+  if (input.party) {
+    const [current, max] = input.party.size;
+    activity['party'] = { id: input.party.id, size: [Math.min(current, max), max] };
+  }
   const timestamps: Record<string, number> = {};
   if (input.startTimestamp !== undefined) timestamps['start'] = input.startTimestamp;
   if (input.endTimestamp !== undefined) timestamps['end'] = input.endTimestamp;
@@ -44,26 +75,90 @@ function toSdkPayload(input: PresenceActivity | null): Record<string, unknown> |
   return activity;
 }
 
+interface ManagerOptions {
+  maxRetries?: number;
+  retryBaseMs?: number;
+  log?: PresenceLog;
+  now?: () => number;
+}
+
 // Serializes, deduplicates and rate-limits setActivity calls. Discord presence
-// is best-effort: repeated failures disable the manager instead of breaking
-// the game or flooding the RPC channel.
+// is best-effort: permission failures pause updates until scope is restored,
+// transient failures retry with bounded backoff, and nothing here can break
+// the game or flood the RPC channel.
 export class PresenceManager {
   private signature: string | null = null;
   private pending: PresenceActivity | null | undefined;
+  private lastInput: PresenceActivity | null | undefined;
   private inFlight = false;
-  private disabled = false;
-  private failures = 0;
+  private disposed = false;
+  private scopeState: PresenceScopeState = 'unknown';
+  private retryCount = 0;
   private lastFlush = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  constructor(private readonly send: PresenceSend, private readonly minIntervalMs = 2000, private readonly debounceMs = 400) {}
+  private readonly maxRetries: number;
+  private readonly retryBaseMs: number;
+  private readonly log: PresenceLog;
+  private readonly now: () => number;
+  constructor(private readonly send: PresenceSend, private readonly minIntervalMs = 2000, private readonly debounceMs = 400, options: ManagerOptions = {}) {
+    this.maxRetries = options.maxRetries ?? 3;
+    this.retryBaseMs = options.retryBaseMs ?? 1000;
+    this.log = options.log ?? noopLog;
+    this.now = options.now ?? Date.now;
+    this.log('presence_initialized');
+  }
 
   update(input: PresenceActivity | null): void {
-    if (this.disabled) return;
+    if (this.disposed) return;
     const signature = JSON.stringify(input);
     if (signature === this.signature) return;
     this.signature = signature;
+    this.lastInput = input;
+    this.retryCount = 0; // a genuinely new state gets a fresh retry budget
+    if (this.scopeState === 'missing') return; // no permission — do not attempt
     this.pending = input;
     this.schedule();
+  }
+
+  /** Re-send the current state, bypassing deduplication (reconnect resync). */
+  resend(): void {
+    if (this.disposed || this.lastInput === undefined || this.scopeState === 'missing') return;
+    this.pending = this.lastInput;
+    this.schedule();
+  }
+
+  clear(): void {
+    if (this.disposed) return;
+    this.signature = JSON.stringify(null);
+    this.lastInput = null;
+    this.retryCount = 0;
+    if (this.scopeState === 'missing') return;
+    this.pending = null;
+    this.schedule();
+    this.log('presence_cleared');
+  }
+
+  /** Records whether rpc.activities.write is believed available. 'missing'
+   * pauses all sends; 'granted' resumes with the last known state. */
+  setScopeState(state: PresenceScopeState): void {
+    if (this.disposed || state === this.scopeState) return;
+    this.scopeState = state;
+    if (state === 'missing') this.log('presence_scope_missing');
+    else if (state === 'granted') {
+      this.log('presence_scope_granted');
+      this.retryCount = 0;
+      this.pending = this.lastInput;
+      this.schedule();
+    }
+  }
+
+  get scope(): PresenceScopeState { return this.scopeState; }
+
+  dispose(): void {
+    this.disposed = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.pending = undefined;
   }
 
   private schedule(): void {
@@ -72,8 +167,8 @@ export class PresenceManager {
   }
 
   private async pump(): Promise<void> {
-    if (this.inFlight || this.disabled || this.pending === undefined) return;
-    const wait = this.minIntervalMs - (Date.now() - this.lastFlush);
+    if (this.inFlight || this.disposed || this.pending === undefined || this.scopeState === 'missing') return;
+    const wait = this.minIntervalMs - (this.now() - this.lastFlush);
     if (wait > 0) {
       this.timer = setTimeout(() => { this.timer = null; void this.pump(); }, wait);
       return;
@@ -81,16 +176,34 @@ export class PresenceManager {
     const input = this.pending;
     this.pending = undefined;
     this.inFlight = true;
+    const assetKey = input ? (input.largeImage.split('/').pop() ?? input.largeImage) : null;
+    this.log('presence_update_requested', { asset: assetKey ?? 'none', hasParty: !!input?.party, timed: input?.startTimestamp !== undefined });
     try {
-      await this.send(toSdkPayload(input));
-      this.failures = 0;
-      this.lastFlush = Date.now();
-    } catch {
-      this.failures++;
-      if (this.failures >= 3) this.disabled = true;
+      const result = await this.send(toSdkPayload(input));
+      this.lastFlush = this.now();
+      this.retryCount = 0;
+      // Discord echoes the accepted activity back; a resolved promise alone is
+      // not proof the presence was applied.
+      const confirmed = result !== null && typeof result === 'object';
+      this.log('presence_update_succeeded', { cleared: input === null, confirmed });
+      if (!confirmed) this.log('presence_update_failed', { operation: 'setActivity', reason: 'unconfirmed_response' });
+    } catch (error) {
+      const kind = classifyPresenceError(error);
+      this.log('presence_update_failed', { operation: 'setActivity', reason: kind, attempt: this.retryCount + 1 });
+      if (kind === 'permission') {
+        this.scopeState = 'missing';
+        this.log('presence_scope_missing');
+      } else if (kind === 'payload') {
+        // A rejected payload will not fix itself — drop it, keep the manager alive.
+      } else if (this.retryCount < this.maxRetries) {
+        const delay = this.retryBaseMs * 2 ** this.retryCount;
+        this.retryCount++;
+        this.log('presence_retry_scheduled', { reason: kind, attempt: this.retryCount, delayMs: delay });
+        this.timer = setTimeout(() => { this.timer = null; if (this.pending === undefined) this.pending = input; void this.pump(); }, delay);
+      }
     } finally {
       this.inFlight = false;
-      if (this.pending !== undefined) this.schedule();
+      if (this.pending !== undefined && this.timer === null) this.schedule();
     }
   }
 }
@@ -129,15 +242,16 @@ export function describePresence(context: PresenceContext): PresenceActivity | n
     const name = gameName(games, room.gameId);
     const mode = room.gameId === 'durak' ? durakMode(room) : null;
     const details = name + (mode ? ' · ' + mode : '');
-    const party = { id: 'arcade-room-' + room.id, size: [room.members.length, room.maxPlayers] as [number, number] };
+    const party = { id: 'arcade-room-' + room.id, size: [Math.min(room.members.length, room.maxPlayers), room.maxPlayers] as [number, number] };
     if (room.phase === 'playing' && match) {
       if (match.status === 'finished') {
         const won = !!match.result && !match.result.draw && match.result.winners.includes(playerId);
         return {
           details: name,
-          state: 'Партия завершена',
+          state: won ? 'Победа в партии' : 'Партия завершена',
           largeImage: won ? ASSETS.victory : gameAsset(room.gameId, 'playing'),
           largeText: won ? 'Победа в партии!' : 'Партия завершена',
+          endTimestamp: match.finishedAt ? Math.floor(Date.parse(match.finishedAt) / 1000) : undefined,
         };
       }
       const startedAt = match.createdAt ? Math.floor(Date.parse(match.createdAt) / 1000) : undefined;
@@ -165,8 +279,8 @@ export function describePresence(context: PresenceContext): PresenceActivity | n
     if (game.id === 'durak') return { details: 'Дурак', state: 'Выбирает режим', largeImage: ASSETS.main, largeText: 'Дурак — выбор режима' };
     return { details: game.name, state: 'Выбирает игру', largeImage: gameAsset(game.id, 'main') };
   }
-  if (page === 'home' || page === 'games') {
-    return { details: 'В игровом клубе', state: 'Выбирает игру', largeImage: ASSETS.main, largeText: 'r!z3 Arcade — игровой клуб' };
+  if (page === 'games') {
+    return { details: 'r!z3 Arcade', state: 'Выбирает игру', largeImage: ASSETS.main, largeText: 'r!z3 Arcade — библиотека игр' };
   }
   return { details: 'r!z3 Arcade', state: 'В игровом клубе', largeImage: ASSETS.main };
 }

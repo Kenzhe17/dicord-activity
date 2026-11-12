@@ -17,6 +17,7 @@ import { BalanceNote } from './components/BalanceNote';
 import { GuildRestrictedScreen } from './components/GuildRestrictedScreen';
 import { connectRoom } from './realtime';
 import { PresenceManager, describePresence } from './presence';
+import type { PresenceLogEvent } from './presence';
 import { parseRoomInviteCode } from './roomAccess';
 
 interface PublicConfig { authMode: 'disabled' | 'mock' | 'discord'; clientId: string | null; persistence: string; testGame: boolean; economy?: boolean; allowedGuildId?: string | null; serverInviteUrl?: string | null }
@@ -86,6 +87,9 @@ export function App() {
       token => api('/session', { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }),
       setContext,
     );
+    // If authorize fell back to identify-only, retry the RPC scope once —
+    // Discord may show its consent prompt. Failure keeps presence disabled.
+    if (client.hasRichPresenceScope === false) await client.requestRichPresenceScope().catch(() => false);
     setSession(value); await restore();
   }
   const applyShareInvite = useCallback(async () => {
@@ -128,15 +132,21 @@ export function App() {
     if (!session || !room) return;
     const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({ autoConnect: false, auth: { token: session.token }, path: proxyPrefix() + '/socket.io', transports: ['websocket'] });
     return connectRoom(socket, room.id, {
-      connection: setConnection, room: setRoom, match: setMatch, error: setError,
+      connection: status => { setConnection(status); if (status === 'Подключено') presence.current?.resend(); }, room: setRoom, match: setMatch, error: setError,
       closed: () => { setRoom(null); setMatch(null); navigate('rooms'); },
     });
   }, [session?.token, room?.id, setRoom, setMatch, navigate]);
+  const presenceLog = useCallback((event: PresenceLogEvent, data?: Record<string, unknown>) => {
+    console.info('[arcade:presence]', JSON.stringify({ event, ...data }));
+  }, []);
   useEffect(() => {
-    if (config?.authMode !== 'discord' || !activity.current) return;
-    presence.current ??= new PresenceManager(input => activity.current!.setActivity(input));
-    presence.current.update(describePresence({ page, targetId: route.split('/')[1], games, room, match, playerId: session?.player.id }));
-  }, [config?.authMode, session?.player.id, page, route, games, room, match]);
+    if (config?.authMode !== 'discord' || !activity.current || !session?.player.id) return;
+    presence.current ??= new PresenceManager(input => activity.current!.setActivity(input), 2000, 400, { log: presenceLog });
+    // If the initial authorize fell back to identify-only, the RPC scope is
+    // almost certainly absent — pause updates instead of hammering setActivity.
+    if (activity.current.hasRichPresenceScope === false) presence.current.setScopeState('missing');
+    presence.current.update(describePresence({ page, targetId: route.split('/')[1], games, room, match, playerId: session.player.id }));
+  }, [config?.authMode, session?.player.id, page, route, games, room, match, presenceLog]);
   useEffect(() => {
     const clear = () => { void activity.current?.setActivity(null).catch(() => {}); };
     window.addEventListener('pagehide', clear);
@@ -154,7 +164,7 @@ export function App() {
     else if (config?.authMode === 'discord') await discordLogin(config);
     else throw new Error('Авторизация отключена в конфигурации сервера');
   });
-  const logout = () => run(async () => { await api('/session', { method: 'DELETE' }); await activity.current?.dispose(); setSession(null); setContext(null); navigate('home'); });
+  const logout = () => run(async () => { await api('/session', { method: 'DELETE' }); presence.current?.dispose(); presence.current = null; await activity.current?.dispose(); setSession(null); setContext(null); navigate('home'); });
   const join = (code: string) => run(async () => {
     const [id, inviteToken] = code.trim().split(':');
     setRoom(await post<RoomView>('/rooms/' + encodeURIComponent(id ?? '') + '/join', inviteToken ? { inviteToken } : {}));

@@ -29,7 +29,12 @@ async function timeout<T>(promise: Promise<T>, milliseconds = 15000): Promise<T>
 export class ActivityClient {
   private listener: ((data: { participants: Participant[] }) => void) | undefined;
   private generation = 0;
+  private rpcScopeRequested = false;
+  private loginAttempted = false;
   constructor(private readonly clientId: string, private readonly sdk: ActivitySdk) {}
+  /** true when the rpc.activities.write authorize attempt succeeded, false when
+   * login fell back to identify-only, null before the first login. */
+  get hasRichPresenceScope(): boolean | null { return this.loginAttempted ? this.rpcScopeRequested : null; }
   async login(
     state: string,
     exchange: (code: string, state: string) => Promise<AuthSession & { accessToken: string }>,
@@ -43,10 +48,13 @@ export class ActivityClient {
     let code: string;
     try {
       ({ code } = await timeout(this.sdk.commands.authorize({ ...authorizeInput, scope: ['identify', 'rpc.activities.write'] })));
+      this.rpcScopeRequested = true;
     } catch {
       // Rich Presence scope denied or unsupported — continue with identify only.
+      this.rpcScopeRequested = false;
       ({ code } = await timeout(this.sdk.commands.authorize({ ...authorizeInput, scope: ['identify'] })));
     }
+    this.loginAttempted = true;
     const session = await exchange(code, state);
     try {
       const authenticated = await timeout(this.sdk.commands.authenticate({ access_token: session.accessToken }));
@@ -76,6 +84,21 @@ export class ActivityClient {
     return this.sdk.guildId === allowedGuildId;
   }
   get instanceId(): string { return this.sdk.instanceId; }
+  /** Best-effort re-authorization for the Rich Presence scope. Discord may
+   * show its consent UI; the returned code is intentionally discarded — the
+   * existing session stays valid. Returns whether authorize succeeded. */
+  async requestRichPresenceScope(): Promise<boolean> {
+    try {
+      await timeout(this.sdk.ready());
+      await timeout(this.sdk.commands.authorize({
+        client_id: this.clientId, response_type: 'code',
+        state: 'presence-' + Date.now().toString(36), prompt: 'none',
+        scope: ['identify', 'rpc.activities.write'],
+      }));
+      this.rpcScopeRequested = true;
+      return true;
+    } catch { return false; }
+  }
   async openExternalLink(url: string): Promise<unknown> {
     return timeout(this.sdk.commands.openExternalLink({ url }));
   }
