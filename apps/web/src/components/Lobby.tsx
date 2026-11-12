@@ -5,6 +5,7 @@ import type { GameInfo, RoomView, MatchView } from '@rize/shared';
 import { useArcade } from '../store';
 import { api, post, ApiError } from '../api';
 import { Avatar } from './Avatar';
+import { BalanceNote } from './BalanceNote';
 import { getRoomJoinAvailability } from '../roomAccess';
 import { DurakTable } from './DurakTable';
 export interface DiscordInviteActions { share: (code: string) => Promise<string>; channel: () => Promise<string> }
@@ -69,6 +70,7 @@ export function Lobby({ games, run, busy, onLeft, discordInvite }: { games: Game
     <details className="room-tools" open={room.phase !== 'playing'}><summary>Участники и приглашения</summary>
     <Panel><div className="panel-heading"><h2><Users size={18}/> За столом</h2><span>{room.members.length} / {room.maxPlayers}</span></div>
       {(() => { const stake = (room.settings as { stake?: number } | undefined)?.stake ?? 0; return stake > 0 ? <p className="stake-line"><Coins size={14}/> Ставка: <strong>{stake.toLocaleString('ru')} монет</strong> с каждого · банк при полном столе: <strong>{(stake * room.maxPlayers).toLocaleString('ru')}</strong> · сейчас: <strong>{(stake * room.members.length).toLocaleString('ru')}</strong></p> : null; })()}
+      <BalanceNote stake={(room.settings as { stake?: number } | undefined)?.stake ?? 0}/>
       {room.members.map(member => <div className="member" key={member.player.id}><Avatar src={member.player.avatar} name={member.player.name} className="avatar"/><strong>{member.player.name}</strong><small>{member.player.id === room.hostId ? 'Хост' : member.connected ? 'В сети' : 'Отключён'}</small><span className={member.ready ? 'ready' : 'muted'}>{member.ready ? 'Готов' : 'Ожидает'}</span>{host && member.player.id !== room.hostId && <Button disabled={busy} onClick={() => void run(async () => setRoom(await post('/rooms/' + room.id + '/host', { targetId: member.player.id })))}>Передать хоста</Button>}</div>)}
       {room.phase !== 'playing' && <div className="button-row"><Button disabled={busy} onClick={() => void run(toggleReady)}>{ready ? 'Отменить готовность' : 'Я готов'}</Button>{host && game?.status === 'ready' && <Button disabled={busy || !canStart} onClick={() => void run(startMatch)}>Начать партию</Button>}</div>}
       {game?.status === 'planned' && <p className="foundation-note">Игра «Скоро»: лобби доступно, запуск партии появится после реализации и проверки движка.</p>}
