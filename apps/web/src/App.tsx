@@ -7,7 +7,8 @@ import type { AuthSession } from '@rize/discord';
 import type { ActivityContext, ActivityClient } from '@rize/discord/client';
 import type { GameInfo, RoomView, RoomSummary, ClientToServerEvents, ServerToClientEvents, Preferences, MatchView } from '@rize/shared';
 import { Button, Panel } from '@rize/ui';
-import { api, post, proxyPrefix, avatarSource } from './api';
+import { api, post, proxyPrefix } from './api';
+import { Avatar } from './components/Avatar';
 import { useArcade, storedToken } from './store';
 import { PlayerPages } from './components/PlayerPages';
 import { LegalPage } from './components/LegalPages';
@@ -147,17 +148,17 @@ export function App() {
   })}</div></section>;
   const lobby = page === 'room' && room ? <Lobby games={games} run={run} busy={busy} onLeft={() => navigate('rooms')} discordInvite={config?.authMode === 'discord' && session ? { share: shareRoomInvite, channel: channelInvite } : undefined}/> : null;
   if (immersive) return <MotionConfig reducedMotion={preferences.reducedMotion ? 'always' : 'user'}><div className="immersive-shell"><main className="immersive-main">
-    <header className="game-header"><span className="brand-mark game-brand">r!</span><strong>{durakMode} дурак</strong><span className="game-header-meta">{room?.name}</span><span className="connection game-header-connection"><Radio size={13}/>{connection}</span></header>
+    <header className="game-header"><span className="brand-mark game-brand">r!<span className="brand-mark-z3">z3</span></span><strong>{durakMode} дурак</strong><span className="game-header-meta">{room?.name}</span><span className="connection game-header-connection"><Radio size={13}/>{connection}</span></header>
     {error && <div role="alert" className="error">{error}<button aria-label="Закрыть сообщение" onClick={() => setError('')}>×</button></div>}
     {lobby}
   </main></div></MotionConfig>;
   return <MotionConfig reducedMotion={preferences.reducedMotion ? 'always' : 'user'}><div className={'shell' + (preferences.compactCards ? ' compact-cards' : '')}>
     <aside className="sidebar">
-      <a className="brand" href="#/home"><span className="brand-mark">r!</span><span>r!z3 <b>ARCADE</b></span></a>
+      <a className="brand" href="#/home"><span className="brand-mark">r!<span className="brand-mark-z3">z3</span></span><span>r!z3 <b>ARCADE</b></span></a>
       <span className="nav-label">ВАШ ИГРОВОЙ КЛУБ</span>
       <nav aria-label="Основная навигация">{navigation.map(([id, label, Icon]) => <button key={id} className={page === id ? 'nav-item active' : 'nav-item'} onClick={() => navigate(id)}><Icon size={19}/>{label}</button>)}</nav>
       <div className="sidebar-note"><span className="status-dot"/> R!Z3 SOCIAL CLUB<p>Общий стол начинается<br/>с хорошей компании.</p></div>
-      <div className="identity"><span className="avatar">{session?.player.avatar ? <img src={avatarSource(session.player.avatar)} alt=""/> : session?.player.name.slice(0, 1) ?? 'Г'}</span><div><strong>{session?.player.name ?? 'Гость'}</strong><small>{config?.authMode === 'mock' ? 'Локальная сессия' : 'Discord Activity'}</small></div>{session && <button aria-label="Выйти" className="icon-button" disabled={busy} onClick={() => void logout()}><LogOut size={18}/></button>}</div>
+      <div className="identity"><Avatar src={session?.player.avatar} name={session?.player.name ?? 'Гость'} className="avatar"/><div><strong>{session?.player.name ?? 'Гость'}</strong><small>{config?.authMode === 'mock' ? 'Локальная сессия' : 'Discord Activity'}</small></div>{session && <button aria-label="Выйти" className="icon-button" disabled={busy} onClick={() => void logout()}><LogOut size={18}/></button>}</div>
     </aside>
     <main>
       <header className="topbar"><span>МЕСТО ВСТРЕЧИ — ARCADE</span><div className="topbar-actions">{session && <button className="icon-button mobile-session" aria-label="Выйти из сессии" disabled={busy} onClick={() => void logout()}><LogOut size={16}/></button>}{room && page !== 'room' && <button className="text-button" onClick={() => navigate('room')}>Вернуться за стол</button>}<span className="connection"><Radio size={14}/>{room ? connection : context ? 'Discord · ' + context.platform : 'Ваш игровой клуб'}</span></div></header>

@@ -3,7 +3,8 @@ import { ArrowLeft, Copy, Lock, Users } from 'lucide-react';
 import { Panel, Button } from '@rize/ui';
 import type { GameInfo, RoomView, MatchView } from '@rize/shared';
 import { useArcade } from '../store';
-import { api, post, avatarSource, ApiError } from '../api';
+import { api, post, ApiError } from '../api';
+import { Avatar } from './Avatar';
 import { getRoomJoinAvailability } from '../roomAccess';
 import { DurakTable } from './DurakTable';
 export interface DiscordInviteActions { share: (code: string) => Promise<string>; channel: () => Promise<string> }
@@ -67,7 +68,7 @@ export function Lobby({ games, run, busy, onLeft, discordInvite }: { games: Game
     })}>Ход +{steps}</Button>)}</div></>}</Panel>}
     <details className="room-tools" open={room.phase !== 'playing'}><summary>Участники и приглашения</summary>
     <Panel><div className="panel-heading"><h2><Users size={18}/> За столом</h2><span>{room.members.length} / {room.maxPlayers}</span></div>
-      {room.members.map(member => <div className="member" key={member.player.id}><span className="avatar">{member.player.avatar ? <img src={avatarSource(member.player.avatar)} alt=""/> : member.player.name.slice(0, 1)}</span><strong>{member.player.name}</strong><small>{member.player.id === room.hostId ? 'Хост' : member.connected ? 'В сети' : 'Отключён'}</small><span className={member.ready ? 'ready' : 'muted'}>{member.ready ? 'Готов' : 'Ожидает'}</span>{host && member.player.id !== room.hostId && <Button disabled={busy} onClick={() => void run(async () => setRoom(await post('/rooms/' + room.id + '/host', { targetId: member.player.id })))}>Передать хоста</Button>}</div>)}
+      {room.members.map(member => <div className="member" key={member.player.id}><Avatar src={member.player.avatar} name={member.player.name} className="avatar"/><strong>{member.player.name}</strong><small>{member.player.id === room.hostId ? 'Хост' : member.connected ? 'В сети' : 'Отключён'}</small><span className={member.ready ? 'ready' : 'muted'}>{member.ready ? 'Готов' : 'Ожидает'}</span>{host && member.player.id !== room.hostId && <Button disabled={busy} onClick={() => void run(async () => setRoom(await post('/rooms/' + room.id + '/host', { targetId: member.player.id })))}>Передать хоста</Button>}</div>)}
       {room.phase !== 'playing' && <div className="button-row"><Button disabled={busy} onClick={() => void run(toggleReady)}>{ready ? 'Отменить готовность' : 'Я готов'}</Button>{host && game?.status === 'ready' && <Button disabled={busy || !canStart} onClick={() => void run(startMatch)}>Начать партию</Button>}</div>}
       {game?.status === 'planned' && <p className="foundation-note">Игра «Скоро»: лобби доступно, запуск партии появится после реализации и проверки движка.</p>}
     </Panel>

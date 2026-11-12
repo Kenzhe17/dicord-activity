@@ -1,6 +1,6 @@
 import { useArcade, storedToken } from './store';
 export class ApiError extends Error { constructor(message: string, readonly status: number) { super(message); this.name = 'ApiError'; } }
-export const proxyPrefix = (): string => location.hostname.endsWith('.discordsays.com') || new URLSearchParams(location.search).has('frame_id') ? '/.proxy' : '';
+export const proxyPrefix = (): string => typeof location === 'undefined' ? '' : location.hostname.endsWith('.discordsays.com') || new URLSearchParams(location.search).has('frame_id') ? '/.proxy' : '';
 export const avatarSource = (url: string): string => proxyPrefix() && url.startsWith('https://cdn.discordapp.com/') ? proxyPrefix() + '/discord-cdn/' + url.slice('https://cdn.discordapp.com/'.length) : url;
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = useArcade.getState().session?.token ?? storedToken();

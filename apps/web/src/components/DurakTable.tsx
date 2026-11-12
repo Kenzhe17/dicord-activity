@@ -4,7 +4,8 @@ import { Clock3, Shield, Crown, WifiOff, Menu, DoorOpen } from 'lucide-react';
 import type { DurakView, DurakAction } from '@rize/durak';
 import type { MatchView, RoomView } from '@rize/shared';
 import { Button } from '@rize/ui';
-import { api, post, avatarSource } from '../api';
+import { api, post } from '../api';
+import { Avatar } from './Avatar';
 import { useArcade } from '../store';
 import { PlayingCard, playingCardLabel } from './PlayingCard';
 import './durak.css';
@@ -52,14 +53,14 @@ export function DurakTable({ match, room, busy, run, onForfeitExit, resultAction
   const statusOf = (id: string, out: boolean, forfeited: boolean) => match.result?.draw ? 'Ничья' : match.result?.winners.includes(id) ? 'Победитель' : forfeited ? 'Сдался' : out ? 'Проиграл' : '—';
   return <section className="durak-game" aria-label="Игровой стол Дурака" data-phase={state.phase} data-match-version={match.version}>
     <div className="durak-toolbar"><div><span className="eyebrow">R!Z3 CARD CLUB</span><h2>{state.mode === 'transfer' ? 'Переводной дурак' : 'Подкидной дурак'}</h2></div><div className="toolbar-actions"><span className="round-label">Розыгрыш {state.bout}</span>{!ended && <div className="game-menu-wrap" ref={menuRef}><Button aria-expanded={menuOpen} onClick={() => setMenuOpen(o => !o)}><Menu size={14}/>Меню</Button>{menuOpen && <div className="game-menu" role="menu">
-      <div className="game-menu-players">{state.players.map(p => { const member = room.members.find(m => m.player.id === p.id); return <div className="game-menu-player" key={p.id}><span className="opponent-avatar">{member?.player.avatar ? <img src={avatarSource(member.player.avatar)} alt=""/> : memberName(p.id).slice(0, 1)}{!member?.connected && <WifiOff size={11}/>}</span><div><strong>{memberName(p.id)}{p.id === ownId ? ' (вы)' : ''}</strong><small>{p.out ? 'Вышел' : p.id === state.defenderId ? 'Защищается' : p.count + ' карт'}</small></div></div>; })}</div>
+      <div className="game-menu-players">{state.players.map(p => { const member = room.members.find(m => m.player.id === p.id); return <div className="game-menu-player" key={p.id}><Avatar src={member?.player.avatar} name={memberName(p.id)} className="opponent-avatar">{!member?.connected && <WifiOff size={11}/>}</Avatar><div><strong>{memberName(p.id)}{p.id === ownId ? ' (вы)' : ''}</strong><small>{p.out ? 'Вышел' : p.id === state.defenderId ? 'Защищается' : p.count + ' карт'}</small></div></div>; })}</div>
       <p className="game-menu-rules">{state.mode === 'transfer' ? 'Переводной дурак: защищающийся может перевести атаку следующему игроку по кругу.' : 'Подкидной дурак: игроки могут подкидывать карты в пределах лимита.'} Козырь показан на столе.</p>
       <div className="game-menu-actions">{state.canSurrender && <Button className="danger-button" disabled={busy} onClick={() => confirming ? void act({ type: 'surrender' }) : setConfirming(true)}>{confirming ? 'Точно сдаться? Партия продолжится без вас' : 'Сдаться'}</Button>}{state.forfeited && !ended && <Button onClick={onForfeitExit}><DoorOpen size={14}/>Покинуть комнату</Button>}</div>
     </div>}</div>}</div></div>
     <div className="opponents">{opponents.map(p => {
       const member = room.members.find(m => m.player.id === p.id), active = state.actorId === p.id;
       return <div key={p.id} className={'opponent' + (active ? ' opponent-active' : '') + (p.out ? ' opponent-out' : '')}>
-        <div className="opponent-identity"><span className="opponent-avatar">{member?.player.avatar ? <img src={avatarSource(member.player.avatar)} alt=""/> : member?.player.name.slice(0, 1)}{!member?.connected && <WifiOff size={12}/>}</span><div><strong>{memberName(p.id)}</strong><small>{p.out ? 'Вышел из игры' : p.id === state.defenderId ? 'Защищается' : active ? 'Ходит' : p.count + ' карт'}</small></div>{p.out && <Crown size={14}/>}</div>
+        <div className="opponent-identity"><Avatar src={member?.player.avatar} name={memberName(p.id)} className="opponent-avatar">{!member?.connected && <WifiOff size={12}/>}</Avatar><div><strong>{memberName(p.id)}</strong><small>{p.out ? 'Вышел из игры' : p.id === state.defenderId ? 'Защищается' : active ? 'Ходит' : p.count + ' карт'}</small></div>{p.out && <Crown size={14}/>}</div>
         <div className="opponent-hand" aria-label={p.count + ' закрытых карт'}>{Array.from({ length: Math.min(6, p.count) }, (_, i) => <span key={i} style={{ transform: 'rotate(' + (i - Math.min(6, p.count) / 2) * 6 + 'deg)' }}><PlayingCard back/></span>)}<b>{p.count}</b></div>
       </div>;
     })}</div>
@@ -79,7 +80,7 @@ export function DurakTable({ match, room, busy, run, onForfeitExit, resultAction
     {ended ? <div className="durak-result" role="status">
       <Crown size={30}/><h2>{match.status === 'interrupted' ? 'Партия прервана' : state.result?.draw ? 'Ничья' : state.forfeited ? 'Вы сдались' : state.result?.losers.includes(ownId) ? 'Вы остались с картами' : state.result?.winners.includes(ownId) ? 'Победа!' : 'Партия без поражения'}</h2>
       <p>{match.status === 'interrupted' ? 'Состояние сохранено. Результат не начислен.' : 'Результат сохранён · рейтинговые очки не изменяются'}{duration !== null && ' · ' + fmtDuration(duration)}</p>
-      <div className="result-standings">{standings.map(p => <div className={'result-standing' + (match.result?.winners.includes(p.id) ? ' winner' : '')} key={p.id}><span className="opponent-avatar">{room.members.find(m => m.player.id === p.id)?.player.avatar ? <img src={avatarSource(room.members.find(m => m.player.id === p.id)!.player.avatar!)} alt=""/> : memberName(p.id).slice(0, 1)}</span><strong>{memberName(p.id)}{p.id === ownId ? ' (вы)' : ''}</strong><small>{statusOf(p.id, p.out, p.forfeited)}</small></div>)}</div>
+      <div className="result-standings">{standings.map(p => <div className={'result-standing' + (match.result?.winners.includes(p.id) ? ' winner' : '')} key={p.id}><Avatar src={room.members.find(m => m.player.id === p.id)?.player.avatar} name={memberName(p.id)} className="opponent-avatar"/><strong>{memberName(p.id)}{p.id === ownId ? ' (вы)' : ''}</strong><small>{statusOf(p.id, p.out, p.forfeited)}</small></div>)}</div>
       {resultActions && <div className="button-row result-actions"><Button disabled={busy} onClick={resultActions.onToggleReady}>{resultActions.ready ? 'Отменить готовность' : 'Я готов — реванш'}</Button>{resultActions.isHost && <Button disabled={busy || !resultActions.canStart} onClick={resultActions.onStart}>Начать партию</Button>}<Button onClick={resultActions.onLeave}>Выйти в меню</Button></div>}
     </div> : <>
       <div className="own-hand-heading"><strong>{state.players.find(p => p.id === ownId)?.out ? state.forfeited ? 'Вы сдались · партия продолжается без вас' : 'Вы вышли · наблюдайте за партией' : 'Ваши карты'}</strong><span>{state.hand.length} карт · {ownTurn ? picked.length ? 'Выберите действие' : 'Подсвеченные карты доступны' : 'Ожидайте своего хода'}</span></div>

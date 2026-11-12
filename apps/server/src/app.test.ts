@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
 import { io as connect } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 import type { AuthSession } from '@rize/discord';
@@ -122,5 +123,47 @@ describe('Socket.IO integration', () => {
       await disconnected;
       expect(socket.connected).toBe(false);
     } finally { socket.disconnect(); bad.disconnect(); }
+  });
+});
+
+describe('Discord CDN avatar proxy', () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  async function withCdn(run: (base: string) => Promise<void>) {
+    const upstream = createServer((req, res) => {
+      if (req.url === '/avatars/123456789012345678/' + 'a'.repeat(32) + '.png') { res.writeHead(200, { 'content-type': 'image/png' }); res.end(png); }
+      else if (req.url === '/embed/avatars/0.png') { res.writeHead(200, { 'content-type': 'image/png' }); res.end(png); }
+      else if (req.url === '/avatars/123456789012345678/' + 'b'.repeat(32) + '.png') { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html>no</html>'); }
+      else { res.writeHead(404); res.end(); }
+    });
+    await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address();
+    if (!address || typeof address === 'string') throw new Error('No stub address');
+    const instance = await buildApp(loadConfig({ ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: process.env['ARCADE_TEST_DATABASE_URL'] }), { logger: false, discordCdnBase: 'http://127.0.0.1:' + address.port });
+    running.push(instance);
+    try { await run('http://127.0.0.1:' + address.port); } finally { await new Promise<void>(resolve => upstream.close(() => resolve())); }
+  }
+  it('proxies whitelisted avatar objects as images with cache headers', async () => {
+    await withCdn(async () => {
+      const { app } = running[running.length - 1]!;
+      const ok = await app.inject({ url: '/discord-cdn/avatars/123456789012345678/' + 'a'.repeat(32) + '.png' });
+      expect(ok.statusCode).toBe(200);
+      expect(ok.headers['content-type']).toContain('image/png');
+      expect(ok.headers['cache-control']).toContain('max-age=86400');
+      expect(ok.rawPayload.equals(png)).toBe(true);
+      const embed = await app.inject({ url: '/discord-cdn/embed/avatars/0.png' });
+      expect(embed.statusCode).toBe(200);
+      const viaProxyPrefix = await app.inject({ url: '/.proxy/discord-cdn/embed/avatars/0.png' });
+      expect(viaProxyPrefix.statusCode).toBe(200); // proves the /.proxy rewrite reaches the avatar route
+    });
+  });
+  it('rejects non-avatar paths and non-image upstream responses', async () => {
+    await withCdn(async () => {
+      const { app } = running[running.length - 1]!;
+      for (const bad of ['/discord-cdn/avatars/../secret.png', '/discord-cdn/app-icons/1/x.png', '/discord-cdn/avatars/notanumber/' + 'a'.repeat(32) + '.png', '/discord-cdn/https://evil.example/x.png', '/discord-cdn/']) {
+        expect((await app.inject({ url: bad })).statusCode).toBe(404);
+      }
+      const html = await app.inject({ url: '/discord-cdn/avatars/123456789012345678/' + 'b'.repeat(32) + '.png' });
+      expect(html.statusCode).toBe(502);
+    });
   });
 });

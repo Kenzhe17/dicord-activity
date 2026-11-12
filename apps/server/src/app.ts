@@ -20,7 +20,7 @@ import { PlatformService } from './platform';
 import { EconomyBridge } from './economy';
 import type { BalanceInfo } from './economy';
 
-export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: { getBalance(id: string): Promise<BalanceInfo | null> } | null } = {}) {
+export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: { getBalance(id: string): Promise<BalanceInfo | null> } | null; discordCdnBase?: string } = {}) {
   if (!options.database && !config.ARCADE_DATABASE_URL) throw new Error('ARCADE_DATABASE_URL is required; no implicit production or memory fallback');
   const db = options.database ?? createArcadeDatabase(config.ARCADE_DATABASE_URL ?? '');
   try { await db.$connect(); await db.player.count(); }
@@ -193,8 +193,8 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   app.post('/api/auth/challenge', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async () => ({ state: await sessions.challenge() }));
   app.post('/api/auth/dev', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async req => {
     if (config.ARCADE_AUTH_MODE !== 'mock' || config.ARCADE_ENV === 'production') throw new DomainError('FORBIDDEN', 'Локальная авторизация отключена');
-    const { name } = z.object({ name: z.string().trim().min(1).max(40) }).strict().parse(req.body);
-    return sessions.create({ id: 'dev:' + randomUUID().replaceAll('-', ''), name, username: name, avatar: null });
+    const { name, avatar } = z.object({ name: z.string().trim().min(1).max(40), avatar: z.string().url().max(512).optional() }).strict().parse(req.body);
+    return sessions.create({ id: 'dev:' + randomUUID().replaceAll('-', ''), name, username: name, avatar: avatar ?? null });
   });
   app.post('/api/auth/discord', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async req => {
     if (config.ARCADE_AUTH_MODE !== 'discord' || !oauth) throw new DomainError('FORBIDDEN', 'Discord авторизация не настроена');
@@ -272,6 +272,29 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     const match = await rooms.action(player.id, envelope); await publishRoom(match.roomId);
     if (match.status === 'finished') await emitFinishedMatch(match.roomId, match.matchId);
     return match;
+  });
+  // Discord Activities route cross-origin requests through /.proxy; avatar URLs
+  // rewritten by the client land here. Only whitelisted Discord CDN object paths
+  // are fetched — the upstream host is fixed, so this is not an open proxy.
+  const discordCdn = options.discordCdnBase ?? 'https://cdn.discordapp.com';
+  const avatarObject = /^\/(?:avatars\/\d{5,25}\/[A-Za-z0-9]{1,128}\.(?:png|webp|jpe?g|gif)|embed\/avatars\/\d{1,3}\.(?:png|webp))$/;
+  app.get('/discord-cdn/*', async (req, reply) => {
+    const path = '/' + String((req.params as Record<string, unknown>)['*'] ?? '');
+    if (!avatarObject.test(path)) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Not found' } });
+    try {
+      const upstream = await fetch(discordCdn + path, { signal: AbortSignal.timeout(5000), redirect: 'follow' });
+      const type = upstream.headers.get('content-type') ?? '';
+      const length = Number(upstream.headers.get('content-length') ?? 0);
+      if (!upstream.ok || !type.startsWith('image/') || length > 2_000_000) {
+        await upstream.body?.cancel();
+        return reply.code(502).send({ error: { code: 'UPSTREAM', message: 'Аватар временно недоступен' } });
+      }
+      const body = Buffer.from(await upstream.arrayBuffer());
+      if (body.byteLength > 2_000_000) return reply.code(502).send({ error: { code: 'UPSTREAM', message: 'Аватар временно недоступен' } });
+      return reply.header('Cache-Control', 'public, max-age=86400').type(type).send(body);
+    } catch {
+      return reply.code(502).send({ error: { code: 'UPSTREAM', message: 'Аватар временно недоступен' } });
+    }
   });
   if (config.ARCADE_SERVE_WEB) {
     await app.register(staticFiles, { root: fileURLToPath(new URL('../../web/dist', import.meta.url)), index: 'index.html' });
