@@ -71,33 +71,38 @@ export function interactionIsAdmin(interaction: DiscordInteraction, adminIds: Re
   return caller !== null && adminIds.has(caller);
 }
 
-/** Announcement payload: a clean embed plus the launch button. No emojis. */
-export function announcementPayload(): { content: string; allowed_mentions: { parse: string[] }; embeds: unknown[]; components: unknown[] } {
+/** Announcement payload: banner on top, then a clean embed plus the launch
+ * button. No emojis. The banner is a publicly reachable URL served by the
+ * web bundle (apps/web/public/assets/news_durak.png). */
+export function announcementPayload(imageUrl: string | null = null): { content: string; allowed_mentions: { parse: string[] }; embeds: unknown[]; components: unknown[] } {
+  const embeds: unknown[] = [];
+  if (imageUrl) embeds.push({ image: { url: imageUrl } });
+  embeds.push({
+    title: 'r!z3 Arcade — Дурак',
+    description: 'На сервере доступна собственная Discord-активность Дурак.',
+    color: 0xa83fff,
+    fields: [
+      { name: 'Режимы', value: 'Подкидной и переводной', inline: true },
+      { name: 'Игроки', value: 'от 2 до 6', inline: true },
+      { name: 'Запуск', value: 'Через активности в голосовом канале', inline: true },
+    ],
+    footer: { text: 'Новые игры уже в разработке.' },
+  });
   return {
     content: '@everyone',
     allowed_mentions: { parse: ['everyone'] },
-    embeds: [{
-      title: 'r!z3 Arcade — Дурак',
-      description: 'На сервере стала доступна собственная Discord-активность Дурак.',
-      color: 0x5865f2,
-      fields: [
-        { name: 'Режимы', value: 'Подкидной и переводной', inline: true },
-        { name: 'Игроки', value: 'от 2 до 6', inline: true },
-        { name: 'Запуск', value: 'Зайдите в голосовой канал и откройте Активности', inline: false },
-      ],
-      footer: { text: 'Новые игры уже в разработке' },
-    }],
+    embeds,
     components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Запустить r!z3 Arcade', custom_id: ARCADE_LAUNCH_CUSTOM_ID }] }],
   };
 }
 
 /** Posts the announcement as a regular channel message via the bot token —
  * completely separate from the interaction, so no "used /news" line appears. */
-export async function publishAnnouncementToChannel(channelId: string, botToken: string): Promise<void> {
+export async function publishAnnouncementToChannel(channelId: string, botToken: string, imageUrl: string | null = null): Promise<void> {
   const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: { authorization: 'Bot ' + botToken, 'content-type': 'application/json' },
-    body: JSON.stringify(announcementPayload()),
+    body: JSON.stringify(announcementPayload(imageUrl)),
     signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) throw new Error('announcement post failed: ' + response.status);

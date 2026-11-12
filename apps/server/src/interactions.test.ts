@@ -88,7 +88,12 @@ describe('interactions endpoint', () => {
     const post = calls.find(c => c.method === 'POST' && c.url.includes('/channels/222222222222222222/messages'));
     expect(post).toBeTruthy();
     expect((post!.body as { content?: string }).content).toBe('@everyone');
-    expect(post!.body!.embeds![0]!.title).toBe('r!z3 Arcade — Дурак');
+    const embeds = post!.body!.embeds as { title?: string; description?: string; image?: { url?: string }; footer?: { text?: string } }[];
+    expect(embeds).toHaveLength(2);
+    expect(embeds[0]!.image?.url).toContain('/.proxy/assets/news_durak.png');
+    expect(embeds[1]!.title).toBe('r!z3 Arcade — Дурак');
+    expect(embeds[1]!.description).toBe('На сервере доступна собственная Discord-активность Дурак.');
+    expect(embeds[1]!.footer?.text).toBe('Новые игры уже в разработке.');
     expect(JSON.stringify(post!.body)).not.toContain('🃏');
     // ephemeral reply is patched with the outcome
     expect(calls.some(c => c.method === 'PATCH' && c.url.includes('/webhooks/') && c.url.includes('/messages/@original'))).toBe(true);
@@ -146,7 +151,9 @@ describe('admin announce', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ posted: true });
     expect(posts).toHaveLength(1);
-    expect(posts[0]!.body.embeds![0]!.title).toBe('r!z3 Arcade — Дурак');
+    const embeds = posts[0]!.body.embeds as { title?: string; image?: { url?: string } }[];
+    expect(embeds[0]!.image?.url).toContain('/.proxy/assets/news_durak.png');
+    expect(embeds[1]!.title).toBe('r!z3 Arcade — Дурак');
     expect(JSON.stringify(posts[0]!.body)).not.toContain('🃏');
     expect(JSON.stringify(posts[0]!.body.components)).toContain('arcade_launch');
   });

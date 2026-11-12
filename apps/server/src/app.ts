@@ -253,7 +253,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
       // then post and update the ephemeral reply with the outcome.
       reply.send({ type: 4, data: { content: 'Публикую новость…', flags: 64 } });
       try {
-        await publishAnnouncementToChannel(interaction.channel_id, botToken);
+        await publishAnnouncementToChannel(interaction.channel_id, botToken, newsBannerUrl);
         req.log.info({ event: 'news_published', channelId: interaction.channel_id }, 'announcement published via /news');
         await patchNewsReply(appId, interaction.token, 'Новость опубликована.');
       } catch (error) {
@@ -265,6 +265,8 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     return interactionResponse(interaction, guildId ?? null);
   });
   const adminIds = () => new Set((config.ARCADE_ADMIN_USER_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean));
+  // Public URL of the Durak news banner, served from the web bundle.
+  const newsBannerUrl = config.ARCADE_ORIGIN.replace(/\/+$/, '') + '/.proxy/assets/news_durak.png';
   const announcementExists = async (channelId: string, botToken: string): Promise<boolean> => {
     try {
       const history = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages?limit=20`, {
@@ -287,7 +289,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     // Do not repost if the launch announcement is already present.
     if (await announcementExists(channelId, botToken)) return { posted: false, reason: 'already_announced' };
     try {
-      await publishAnnouncementToChannel(channelId, botToken);
+      await publishAnnouncementToChannel(channelId, botToken, newsBannerUrl);
     } catch {
       throw new DomainError('GAME_UNAVAILABLE', 'Discord отклонил публикацию объявления');
     }
