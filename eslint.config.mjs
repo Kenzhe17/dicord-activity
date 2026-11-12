@@ -5,5 +5,5 @@ export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
   { files: ['**/*.{ts,tsx}'], rules: { '@typescript-eslint/consistent-type-imports': 'error', '@typescript-eslint/no-explicit-any': 'error' } },
-  { files: ['tooling/*.mjs'], languageOptions: { globals: { console: 'readonly', process: 'readonly', URL: 'readonly' } } },
+  { files: ['tooling/*.mjs'], languageOptions: { globals: { console: 'readonly', process: 'readonly', URL: 'readonly', AbortSignal: 'readonly', fetch: 'readonly' } } },
 );

@@ -263,12 +263,18 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
       reply.send({ type: 5 }); // deferred channel message — must answer within 3s
       try {
         await publishAnnouncementViaWebhook(appId, interaction.token);
-      } catch {
-        await fetch(`https://discord.com/api/v10/webhooks/${appId}/${interaction.token}/messages/@original`, {
+        req.log.info({ event: 'news_published', channelId: interaction.channel_id }, 'announcement published via /news');
+      } catch (error) {
+        req.log.warn({ event: 'news_publish_failed', err: error instanceof Error ? error.message : String(error) }, '/news announcement publish failed');
+        const patch = await fetch(`https://discord.com/api/v10/webhooks/${appId}/${interaction.token}/messages/@original`, {
           method: 'PATCH', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ content: 'Не удалось опубликовать объявление. Попробуйте позже.', allowed_mentions: { parse: [] } }),
           signal: AbortSignal.timeout(8000),
-        }).catch(() => {});
+        }).catch(patchError => {
+          req.log.warn({ event: 'news_error_patch_failed', err: patchError instanceof Error ? patchError.message : String(patchError) }, 'failed to patch deferred /news reply');
+          return null;
+        });
+        if (patch && !patch.ok) req.log.warn({ event: 'news_error_patch_rejected', status: patch.status }, 'Discord rejected /news error patch');
       }
       return reply;
     }
