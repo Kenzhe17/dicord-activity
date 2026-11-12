@@ -44,13 +44,53 @@ describe('DiscordGuildVerifier', () => {
     location: { id: 'gc-1-2', kind: 'gc', channel_id: '2', guild_id: ALLOWED },
     users: [DISCORD_ID, '999999999999999999'],
   };
-  function stub(body: unknown, status = 200) {
-    return vi.fn(async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+  const appMe = { id: DISCORD_ID, name: 'rize3 Arcade' };
+  function stub(responses: Record<string, { body: unknown; status?: number } | ((url: string) => { body: unknown; status?: number })>) {
+    return vi.fn(async (input: unknown) => {
+      const url = String(input);
+      const hit = url.includes('/oauth2/applications/@me') ? responses['app'] : responses['instance'];
+      const resolved = typeof hit === 'function' ? hit(url) : hit;
+      if (!resolved) return new Response('{}', { status: 404 });
+      return new Response(JSON.stringify(resolved.body), { status: resolved.status ?? 200 });
+    }) as unknown as typeof fetch;
   }
+  const okResponses = { app: { body: appMe }, instance: { body: instance } };
+  const FAST = [1, 1, 1];
   const base = { applicationId: DISCORD_ID, instanceId: 'i-1', userId: DISCORD_ID };
   it('confirms a valid guild-channel instance with the user inside', async () => {
-    const v = new DiscordGuildVerifier('bot-token', ALLOWED, stub(instance));
+    const v = new DiscordGuildVerifier('bot-token', ALLOWED, stub(okResponses));
     await expect(v.verify(base)).resolves.toEqual({ guildId: ALLOWED, instanceId: 'i-1' });
+  });
+  it('rejects a bot token that does not belong to the Arcade application', async () => {
+    const reasons: string[] = [];
+    for (const app of [{ body: {}, status: 401 }, { body: { id: '000000000000000000' } }]) {
+      const v = new DiscordGuildVerifier('bad-token', ALLOWED, stub({ app, instance: okResponses.instance }), (r) => reasons.push(r));
+      await expect(v.verify(base)).resolves.toBeNull();
+    }
+    expect(reasons).toContain('invalid_bot_token');
+  });
+  it('retries transient 404s and user-list lag, then succeeds', async () => {
+    let instanceCalls = 0;
+    const request = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/oauth2/applications/@me')) return new Response(JSON.stringify(appMe));
+      instanceCalls++;
+      if (instanceCalls === 1) return new Response('{}', { status: 404 });
+      if (instanceCalls === 2) return new Response(JSON.stringify({ ...instance, users: [] }));
+      return new Response(JSON.stringify(instance));
+    }) as unknown as typeof fetch;
+    const v = new DiscordGuildVerifier('bot-token', ALLOWED, request, undefined, FAST);
+    await expect(v.verify(base)).resolves.toEqual({ guildId: ALLOWED, instanceId: 'i-1' });
+    expect(instanceCalls).toBe(3);
+  });
+  it('gives up after bounded retries with a diagnosable reason', async () => {
+    const reasons: string[] = [];
+    const v = new DiscordGuildVerifier('bot-token', ALLOWED, stub({ app: okResponses.app, instance: { body: { ...instance, users: [] } } }), (r) => reasons.push(r), FAST);
+    await expect(v.verify(base)).resolves.toBeNull();
+    expect(reasons).toContain('user_not_present');
+    const missing = new DiscordGuildVerifier('bot-token', ALLOWED, stub({ app: okResponses.app, instance: { body: {}, status: 404 } }), (r) => reasons.push(r), FAST);
+    await expect(missing.verify(base)).resolves.toBeNull();
+    expect(reasons).toContain('discord_http_404');
   });
   it('rejects other guilds, non-guild locations, foreign apps, missing users and API failures', async () => {
     const cases: [unknown, number][] = [
@@ -59,14 +99,14 @@ describe('DiscordGuildVerifier', () => {
       [{ ...instance, application_id: '000000000000000000' }, 200],
       [{ ...instance, instance_id: 'other' }, 200],
       [{ ...instance, users: ['999999999999999999'] }, 200],
-      [{ error: 'unknown' }, 404],
+      [{ error: 'unknown' }, 400],
       [{ broken: true }, 200],
     ];
     for (const [body, status] of cases) {
-      const v = new DiscordGuildVerifier('bot-token', ALLOWED, stub(body, status));
+      const v = new DiscordGuildVerifier('bot-token', ALLOWED, stub({ app: okResponses.app, instance: { body, status } }), undefined, FAST);
       await expect(v.verify(base)).resolves.toBeNull();
     }
-    const offline = new DiscordGuildVerifier('bot-token', ALLOWED, vi.fn(async () => { throw new Error('down'); }) as unknown as typeof fetch);
+    const offline = new DiscordGuildVerifier('bot-token', ALLOWED, vi.fn(async () => { throw new Error('down'); }) as unknown as typeof fetch, undefined, FAST);
     await expect(offline.verify(base)).resolves.toBeNull();
   });
 });

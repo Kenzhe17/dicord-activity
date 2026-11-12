@@ -44,8 +44,9 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   const guildVerifier: GuildVerifier | null = options.guildVerifier !== undefined
     ? options.guildVerifier
     : guildRestricted && config.ARCADE_DISCORD_BOT_TOKEN && guildId
-      ? new DiscordGuildVerifier(config.ARCADE_DISCORD_BOT_TOKEN, guildId)
+      ? new DiscordGuildVerifier(config.ARCADE_DISCORD_BOT_TOKEN, guildId, fetch, (reason, detail) => app.log.warn({ event: 'guild_verify_rejected', reason, ...detail }, 'Guild verification rejected'))
       : null;
+  if (guildRestricted && !guildVerifier) app.log.error({ event: 'guild_verifier_missing' }, 'ARCADE_DISCORD_BOT_TOKEN is not configured; all Discord logins will be rejected');
   function guardSession(session: AuthSession): void {
     if (!guildRestricted) return;
     if (!guildId || session.guildId !== guildId || !session.instanceId) {
