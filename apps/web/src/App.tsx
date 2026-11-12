@@ -104,15 +104,6 @@ export function App() {
       setError(reason instanceof Error ? reason.message : 'Приглашение недействительно');
     }
   }, [navigate, setRoom, setMatch]);
-  const shareRoomInvite = useCallback(async (code: string): Promise<string> => {
-    const client = activity.current;
-    if (!client) throw new Error('Discord Activity недоступна');
-    const result = await client.shareLink({ message: 'Заходи в r!z3 Arcade — я создал комнату, присоединяйся!', custom_id: code });
-    if (!result.success) return 'Отправка отменена';
-    if (result.didSendMessage) return 'Приглашение отправлено';
-    if (result.didCopyLink) return 'Ссылка на Activity скопирована — отправьте её друзьям';
-    return 'Приглашение готово';
-  }, []);
   const channelInvite = useCallback(async (): Promise<string> => {
     const client = activity.current;
     if (!client) throw new Error('Discord Activity недоступна');
@@ -175,7 +166,7 @@ export function App() {
     const Icon = icons[game.id as keyof typeof icons] ?? Layers3;
     return <motion.button key={game.id} className={'game-card game-' + game.id} initial={preferences.reducedMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }} onClick={() => navigate('game/' + game.id)}><div className="game-art"><span className="game-number">0{index + 1}</span><Icon size={80} strokeWidth={1}/><span className="game-tag">{game.status === 'planned' ? 'СКОРО' : game.id === 'sandbox' ? 'DEV · ТЕСТ' : 'ИГРАТЬ'}</span></div><div className="game-copy"><h3>{game.name}<ArrowUpRight size={20}/></h3><p>{game.description}</p><span><Users size={14}/>{game.minPlayers}–{game.maxPlayers} игроков</span></div></motion.button>;
   })}</div></section>;
-  const lobby = page === 'room' && room ? <Lobby games={games} run={run} busy={busy} onLeft={() => navigate('rooms')} discordInvite={config?.authMode === 'discord' && session ? { share: shareRoomInvite, channel: channelInvite } : undefined}/> : null;
+  const lobby = page === 'room' && room ? <Lobby games={games} run={run} busy={busy} onLeft={() => navigate('rooms')} discordInvite={config?.authMode === 'discord' && session ? { channel: channelInvite } : undefined}/> : null;
   const openExternalLink = (url: string) => { const client = activity.current; if (client) void client.openExternalLink(url).catch(() => {}); else window.open(url, '_blank', 'noopener'); };
   if (restricted) return <GuildRestrictedScreen inviteUrl={config?.serverInviteUrl ?? null} guildId={config?.allowedGuildId ?? null} onInvite={openExternalLink}/>;
   if (immersive) return <MotionConfig reducedMotion={preferences.reducedMotion ? 'always' : 'user'}><div className="immersive-shell"><main className="immersive-main">
