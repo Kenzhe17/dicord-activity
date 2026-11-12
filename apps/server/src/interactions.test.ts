@@ -87,6 +87,7 @@ describe('interactions endpoint', () => {
     expect(response.json()).toMatchObject({ type: 4 }); // ephemeral only — no public "used /news"
     const post = calls.find(c => c.method === 'POST' && c.url.includes('/channels/222222222222222222/messages'));
     expect(post).toBeTruthy();
+    expect((post!.body as { content?: string }).content).toBe('@everyone');
     expect(post!.body!.embeds![0]!.title).toBe('r!z3 Arcade — Дурак');
     expect(JSON.stringify(post!.body)).not.toContain('🃏');
     // ephemeral reply is patched with the outcome

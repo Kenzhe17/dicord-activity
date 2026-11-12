@@ -72,8 +72,10 @@ export function interactionIsAdmin(interaction: DiscordInteraction, adminIds: Re
 }
 
 /** Announcement payload: a clean embed plus the launch button. No emojis. */
-export function announcementPayload(): { embeds: unknown[]; components: unknown[] } {
+export function announcementPayload(): { content: string; allowed_mentions: { parse: string[] }; embeds: unknown[]; components: unknown[] } {
   return {
+    content: '@everyone',
+    allowed_mentions: { parse: ['everyone'] },
     embeds: [{
       title: 'r!z3 Arcade — Дурак',
       description: 'На сервере стала доступна собственная Discord-активность Дурак.',
