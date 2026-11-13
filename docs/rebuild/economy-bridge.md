@@ -1,7 +1,8 @@
 # Economy Bridge — cross-project architecture
 
-Status: **read-only balance lookup, disabled by default.** No debits,
-payouts, reservations or stakes are implemented or enabled.
+Status: **balance lookup + pooled-stake escrow/settle/refund, paid stakes
+gated by `ARCADE_STAKES_ENABLED` (default off) and
+`ECONOMY_BRIDGE_WRITES_ENABLED` on the bot.**
 
 ## Constraint discovered in production
 
@@ -42,8 +43,17 @@ Browser ──HTTPS──> Arcade server ──HTTPS──> Bot public domain
   any failure as "unavailable" (never a fake balance), and is disabled
   unless all three `ARCADE_ECONOMY_*` variables are set.
 - The browser only ever sees `GET /api/economy/balance`, which requires
-  a valid Arcade session and returns `{enabled, available, balance,
-  walletExists}`. No database URL or bridge token reaches the client.
+  a valid Arcade session and returns `{enabled, available, reason?,
+  balance, walletExists, writesEnabled}`. `reason` classifies bridge
+  failures (`unavailable`, `unauthorized`, `rate_limited`,
+  `invalid_response`, `bad_request`) so the UI never mistakes an outage
+  for "not configured" and never shows a fake balance. `writesEnabled`
+  mirrors the bot's `ECONOMY_BRIDGE_WRITES_ENABLED` flag so the UI can
+  warn that stakes are disabled bot-side before a paid match is tried.
+  No database URL or bridge token reaches the client.
+- `GET /internal/economy/health` on the bot is a token-protected
+  liveness probe (`{ok, writes_enabled}`) for Railway-side diagnostics —
+  it touches no balances.
 
 ## Railway variables (names only — set values in the dashboard)
 
@@ -96,14 +106,16 @@ migrating Railway services and re-pointing the bot's database,
 discord connections and secrets — a production change that needs a
 maintenance window and explicit approval. Not attempted.
 
-## Still required before any paid-stake mode
+## Paid-stake enablement checklist
 
 - Bot-side operation ledger + atomic conditional debit/credit endpoints
-  (idempotent by operation ID).
-- Arcade-side `EconomyOperation` state machine
-  (CREATED→RESERVING→FUNDED→IN_PROGRESS→SETTLING→SETTLED /
-  REFUNDING→REFUNDED / NEEDS_RECONCILIATION) per
-  `docs/rebuild/stake-settlement.md`.
-- Concurrent debit, insufficient-funds, disconnect-during-reservation,
-  restart-during-payout, duplicate-settlement and reconciliation tests
-  against a test database before production enablement.
+  (idempotent by operation ID) — **implemented** (`arcade_escrow` /
+  `arcade_ledger` / `arcade_pending_credit`, advisory locks, replay-safe).
+- Arcade-side stake hold/payout/refund state machine — **implemented**
+  (`stake_hold`/`stake_payout` `EconomyOperation` rows, deterministic
+  escrow op IDs per request, orphan-refund reconciliation scan).
+- Remaining before flipping `ARCADE_STAKES_ENABLED=true` in production:
+  verify the public bridge URL end-to-end (`/internal/economy/health`
+  then a real escrow/settle/refund cycle on test wallets), confirm
+  `ECONOMY_BRIDGE_WRITES_ENABLED=true` on the bot, and run a live
+  paid-match smoke test.

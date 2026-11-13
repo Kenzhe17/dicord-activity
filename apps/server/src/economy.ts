@@ -3,9 +3,12 @@ import { z } from 'zod';
 const balanceResponse = z.object({
   balance: z.number().int().nonnegative().nullable(),
   exists: z.boolean(),
+  writes_enabled: z.boolean().optional(),
 }).strict();
 
-export interface BalanceInfo { balance: number | null; exists: boolean }
+export type BalanceResult =
+  | { ok: true; balance: number | null; exists: boolean; writesEnabled: boolean }
+  | { ok: false; reason: BridgeFailure };
 
 /** Definitive vs transient bridge outcomes. `unavailable`, `rate_limited` and
  * `invalid_response` are retryable; everything else is a final answer. */
@@ -49,20 +52,33 @@ export class EconomyBridge {
 
   get enabled(): boolean { return true; }
 
-  /** Read-only balance lookup. Returns null when the bridge is unreachable
-   * or answers unexpectedly — callers must treat null as "unavailable". */
-  async getBalance(discordUserId: string): Promise<BalanceInfo | null> {
-    if (!/^[0-9]{17,20}$/.test(discordUserId)) return null;
+  /** Read-only balance lookup with classified failures. `ok:false` carries
+   * the bridge failure reason so callers can distinguish an outage from a
+   * rejected token or a malformed reply — never a fake balance. */
+  async getBalance(discordUserId: string): Promise<BalanceResult> {
+    if (!/^[0-9]{17,20}$/.test(discordUserId)) return { ok: false, reason: 'bad_request' };
+    let response: Response;
     try {
-      const response = await fetch(this.baseUrl + '/internal/economy/balance?guild_id=' + this.guildId + '&user_id=' + discordUserId, {
+      response = await fetch(this.baseUrl + '/internal/economy/balance?guild_id=' + this.guildId + '&user_id=' + discordUserId, {
         headers: { 'x-bridge-token': this.token, accept: 'application/json' },
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-      if (!response.ok) return null;
-      const parsed = balanceResponse.safeParse(await response.json());
-      return parsed.success ? parsed.data : null;
     } catch {
-      return null;
+      return { ok: false, reason: 'unavailable' };
+    }
+    if (!response.ok) {
+      const statusReason: BridgeFailure =
+        response.status === 401 || response.status === 403 ? 'unauthorized' :
+        response.status === 429 ? 'rate_limited' : 'unavailable';
+      return { ok: false, reason: statusReason };
+    }
+    try {
+      const parsed = balanceResponse.safeParse(await response.json());
+      return parsed.success
+        ? { ok: true, balance: parsed.data.balance, exists: parsed.data.exists, writesEnabled: parsed.data.writes_enabled ?? true }
+        : { ok: false, reason: 'invalid_response' };
+    } catch {
+      return { ok: false, reason: 'invalid_response' };
     }
   }
 

@@ -203,6 +203,8 @@ export class PlatformService {
         const escrow = await this.economy.escrow(escrowOpId, stake.players.map(playerId => ({ userId: playerId, amount: stake.amount })));
         if (!escrow.ok) {
           if (escrow.reason === 'insufficient') throw new DomainError('CONFLICT', 'Недостаточно монет у одного из игроков');
+          if (escrow.reason === 'unauthorized') throw new DomainError('GAME_UNAVAILABLE', 'Ошибка авторизации economy-моста — матч не начат');
+          if (escrow.reason === 'bad_request' || escrow.reason === 'not_found' || escrow.reason === 'conflict') throw new DomainError('CONFLICT', 'Не удалось зарезервировать ставку — матч не начат');
           throw new DomainError('GAME_UNAVAILABLE', 'Банк временно недоступен — матч не начат');
         }
       }

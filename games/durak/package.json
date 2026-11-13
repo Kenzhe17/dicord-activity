@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./cards": "./engine/cards.ts"
   },
   "dependencies": {
     "@rize/platform-core": "workspace:*",

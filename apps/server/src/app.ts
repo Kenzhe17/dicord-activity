@@ -19,13 +19,13 @@ import { createGameRegistry } from './games';
 import { PersistentSessions, requestSchema } from './persistence';
 import { PlatformService } from './platform';
 import { EconomyBridge } from './economy';
-import type { BalanceInfo, StakesBridge } from './economy';
+import type { BalanceResult, StakesBridge } from './economy';
 import { DiscordGuildVerifier } from './guild';
 import type { GuildVerifier } from './guild';
 import { interactionIsAdmin, interactionResponse, interactionSchema, NEWS_COMMAND_NAME, patchNewsReply, publishAnnouncementToChannel, verifyDiscordSignature } from './interactions';
 import type { DiscordInteraction } from './interactions';
 
-export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: ({ getBalance(id: string): Promise<BalanceInfo | null> } & Partial<StakesBridge>) | null; discordCdnBase?: string; guildVerifier?: GuildVerifier | null } = {}) {
+export async function buildApp(config: Config, options: { oauth?: AuthProvider; logger?: boolean; database?: PrismaClient; scheduleTimers?: boolean; economy?: ({ getBalance(id: string): Promise<BalanceResult> } & Partial<StakesBridge>) | null; discordCdnBase?: string; guildVerifier?: GuildVerifier | null } = {}) {
   if (!options.database && !config.ARCADE_DATABASE_URL) throw new Error('ARCADE_DATABASE_URL is required; no implicit production or memory fallback');
   const db = options.database ?? createArcadeDatabase(config.ARCADE_DATABASE_URL ?? '');
   try { await db.$connect(); await db.player.count(); }
@@ -218,8 +218,8 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     const player = await actor(req.headers.authorization);
     if (!economy) return { enabled: false };
     const balance = await economy.getBalance(player.id);
-    if (!balance) return { enabled: true, available: false };
-    return { enabled: true, available: true, balance: balance.exists ? balance.balance : 0, walletExists: balance.exists };
+    if (!balance.ok) return { enabled: true, available: false, reason: balance.reason };
+    return { enabled: true, available: true, balance: balance.exists ? balance.balance : 0, walletExists: balance.exists, writesEnabled: balance.writesEnabled };
   });
   app.get('/api/games', async () => games.list());
   // Discord Interactions endpoint for the Arcade application. Public route —

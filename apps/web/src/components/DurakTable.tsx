@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Clock3, Shield, Crown, WifiOff, Menu, DoorOpen, Coins } from 'lucide-react';
+import { Clock3, Shield, Crown, WifiOff, Menu, DoorOpen, Coins, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { DurakView, DurakAction } from '@rize/durak';
 import type { MatchView, RoomView } from '@rize/shared';
 import { Button } from '@rize/ui';
@@ -8,6 +8,8 @@ import { api, post } from '../api';
 import { Avatar } from './Avatar';
 import { useArcade } from '../store';
 import { PlayingCard, playingCardLabel } from './PlayingCard';
+import { DURAK_SORT_MODES, loadDurakSort, saveDurakSort, sortDurakHand } from './durakSort';
+import type { DurakSortMode } from './durakSort';
 import './durak.css';
 
 interface ResultActions { ready: boolean; isHost: boolean; canStart: boolean; onToggleReady: () => void; onStart: () => void; onLeave: () => void }
@@ -16,7 +18,9 @@ export function DurakTable({ match, room, busy, run, onForfeitExit, resultAction
   const state = match.state as DurakView;
   const [selected, setSelected] = useState<number[]>([]), [target, setTarget] = useState<number | null>(null), [clock, setClock] = useState(Date.now());
   const [menuOpen, setMenuOpen] = useState(false), [confirming, setConfirming] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [sortMode, setSortMode] = useState<DurakSortMode>(() => loadDurakSort());
+  const [scrollEdges, setScrollEdges] = useState({ left: false, right: false });
+  const menuRef = useRef<HTMLDivElement>(null), handRef = useRef<HTMLDivElement>(null), lastHandScroll = useRef(0), lastPointerType = useRef('');
   useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 500); return () => clearInterval(timer); }, []);
   useEffect(() => { setConfirming(false); setMenuOpen(false); }, [match.version, match.status]);
   useEffect(() => {
@@ -26,6 +30,26 @@ export function DurakTable({ match, room, busy, run, onForfeitExit, resultAction
     document.addEventListener('pointerdown', close); document.addEventListener('keydown', key);
     return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', key); };
   }, [menuOpen]);
+  const sortedHand = useMemo(() => sortDurakHand(state.hand, sortMode, state.trump), [state.hand, sortMode, state.trump]);
+  const updateScrollEdges = () => {
+    const el = handRef.current;
+    if (!el) return;
+    setScrollEdges({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+  };
+  useEffect(() => {
+    updateScrollEdges();
+    const el = handRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(updateScrollEdges);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sortedHand.length, sortMode, state.hand.length]);
+  const scrollHand = (direction: -1 | 1) => {
+    const el = handRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction * Math.max(120, el.clientWidth * 0.75), behavior: 'smooth' });
+  };
+  const changeSort = (mode: DurakSortMode) => { setSortMode(mode); saveDurakSort(mode); };
   const ownId = session?.player.id ?? '', ownTurn = state.actorId === ownId;
   const choices = state.legalActions;
   const picked = selected.filter(c => state.hand.includes(c));
@@ -88,11 +112,16 @@ export function DurakTable({ match, room, busy, run, onForfeitExit, resultAction
       {resultActions && <div className="button-row result-actions"><Button disabled={busy} onClick={resultActions.onToggleReady}>{resultActions.ready ? 'Отменить готовность' : 'Я готов — реванш'}</Button>{resultActions.isHost && <Button disabled={busy || !resultActions.canStart} onClick={resultActions.onStart}>Начать партию</Button>}<Button onClick={resultActions.onLeave}>Выйти в меню</Button></div>}
     </div> : <>
       <div className="own-hand-heading"><strong>{state.players.find(p => p.id === ownId)?.out ? state.forfeited ? 'Вы сдались · партия продолжается без вас' : 'Вы вышли · наблюдайте за партией' : 'Ваши карты'}</strong><span>{state.hand.length} карт · {ownTurn ? picked.length ? 'Выберите действие' : 'Подсвеченные карты доступны' : 'Ожидайте своего хода'}</span></div>
-      <div className="own-hand" aria-label="Ваши карты"><AnimatePresence>{state.hand.map((c, i) => <motion.button key={c} layout className={'hand-card' + (picked.includes(c) ? ' selected' : '') + (selectable.has(c) ? ' playable' : '')} initial={preferences.reducedMotion ? false : { y: -50, opacity: 0 }} animate={{ y: picked.includes(c) ? -12 : 0, opacity: 1 }} exit={{ y: -65, opacity: 0 }} transition={{ duration: preferences.reducedMotion ? 0 : .18, delay: state.bout === 1 && state.lastEvent === 'deal' ? i * .035 : 0 }} aria-label={playingCardLabel(c)} aria-pressed={picked.includes(c)} data-hand-card={c} disabled={!selectable.has(c) || busy} onClick={() => {
+      <div className="hand-sort" role="group" aria-label="Сортировка карт">{DURAK_SORT_MODES.map(mode => <button key={mode} type="button" className={sortMode === mode ? 'active' : ''} aria-pressed={sortMode === mode} onClick={() => changeSort(mode)}>{mode === 'suit' ? 'По мастям' : mode === 'rank' ? 'По достоинству' : 'Как получены'}</button>)}</div>
+      <div className={'own-hand-wrap' + (scrollEdges.left || scrollEdges.right ? ' scrollable' : '')} onPointerDownCapture={event => { lastPointerType.current = event.pointerType; }} onClickCapture={event => { if (lastPointerType.current !== 'mouse' && Date.now() - lastHandScroll.current < 250) { event.preventDefault(); event.stopPropagation(); } }}>
+        {scrollEdges.left && <button type="button" className="hand-scroll left" aria-label="Прокрутить руку влево" onClick={() => scrollHand(-1)}><ChevronLeft size={18}/></button>}
+        {scrollEdges.right && <button type="button" className="hand-scroll right" aria-label="Прокрутить руку вправо" onClick={() => scrollHand(1)}><ChevronRight size={18}/></button>}
+        <div className={'own-hand' + (sortedHand.length > 10 ? ' dense' : '')} ref={handRef} aria-label="Ваши карты" onScroll={() => { lastHandScroll.current = Date.now(); updateScrollEdges(); }}><AnimatePresence>{sortedHand.map((c, i) => <motion.button key={c} layout className={'hand-card' + (picked.includes(c) ? ' selected' : '') + (selectable.has(c) ? ' playable' : '')} initial={preferences.reducedMotion ? false : { y: -50, opacity: 0 }} animate={{ y: picked.includes(c) ? -12 : 0, opacity: 1 }} exit={{ y: -65, opacity: 0 }} transition={{ duration: preferences.reducedMotion ? 0 : .18, delay: state.bout === 1 && state.lastEvent === 'deal' ? i * .035 : 0 }} aria-label={playingCardLabel(c)} aria-pressed={picked.includes(c)} data-hand-card={c} disabled={!selectable.has(c) || busy} onClick={() => {
         setTarget(null);
         const multi = state.phase === 'opening' || state.phase === 'defending' && choices.some(a => a.type === 'transfer' && a.cards.includes(c));
         setSelected(multi ? picked.includes(c) ? picked.filter(x => x !== c) : [...picked, c] : picked.includes(c) ? [] : [c]);
       }}><PlayingCard card={c}/></motion.button>)}</AnimatePresence></div>
+      </div>
       <div className="durak-controls">{ownTurn && !state.paused ? <>{button('attack', 'Атаковать')}{button('defend', 'Защититься')}{button('transfer', 'Перевести')}{button('throw', 'Подкинуть')}{button('take', 'Взять')}{button('pass', state.phase === 'taking' ? 'Не подкидывать' : 'Бито / не подкидываю')}{picked.length > 0 && <button className="text-button" onClick={() => { setSelected([]); setTarget(null); }}>Снять выбор</button>}</> : <p>{phaseName}</p>}</div>
       {ownTurn && choices.some(a => a.type === 'defend') && <p className="card-hint">Выберите карту в руке, затем карту атаки на столе и нажмите «Защититься».</p>}
     </>}

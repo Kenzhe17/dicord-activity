@@ -57,3 +57,53 @@
 .stake-payout{display:flex;justify-content:space-between;font-size:12px;color:#a9a5b5;padding:4px 0}
 .stake-payout.mine{color:#e8d9a8;font-weight:600}
 .stake-payout strong{color:#9ecdb7}
+
+/* --- Mobile hand: sorting, adaptive overlap, edge scroll buttons --- */
+.hand-sort{display:flex;justify-content:flex-end;gap:4px;margin-top:10px}
+.hand-sort button{border:1px solid #3a3644;background:#1d1b26;color:#a5a1b3;border-radius:999px;padding:4px 10px;font-size:10px;line-height:1.4;cursor:pointer;white-space:nowrap}
+.hand-sort button:hover{color:#e6e2f2;border-color:#55496e}
+.hand-sort button.active{background:#2c2340;border-color:#8a6fd0;color:#e2d4ff}
+.hand-sort button:focus-visible{outline:2px solid #e6ce97;outline-offset:2px}
+.own-hand-wrap{position:relative}
+.own-hand{touch-action:pan-x;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;user-select:none;-webkit-user-select:none;scroll-padding-inline:16px;padding-inline:12px}
+.hand-scroll{position:absolute;top:50%;transform:translateY(-50%);z-index:8;width:30px;height:46px;display:grid;place-items:center;border:1px solid #4a4360;border-radius:50%;background:#1c1928d9;color:#d8d2ea;cursor:pointer;box-shadow:0 4px 14px #0008;backdrop-filter:blur(4px)}
+.hand-scroll:hover{background:#2a2440;color:#fff}
+.hand-scroll:focus-visible{outline:2px solid #e6ce97;outline-offset:2px}
+.hand-scroll.left{left:0}.hand-scroll.right{right:0}
+@media(max-width:640px){
+  .own-hand{gap:4px}
+  .own-hand .hand-card{margin-left:-13px}
+  .own-hand .hand-card:first-child{margin-left:0}
+  .own-hand .hand-card.selected{margin-left:-4px}
+  .own-hand .hand-card{z-index:1}
+  .own-hand .hand-card.playable{z-index:2}
+  .own-hand .hand-card.selected{z-index:6}
+  .hand-sort button{padding:4px 8px;font-size:9px}
+}
+@media(max-width:380px){
+  .hand-card{width:52px;min-width:52px}
+}
+/* Immersive shell: keep hand and controls reachable on short screens */
+.immersive-main .durak-game{overflow-y:auto;overflow-x:hidden}
+.immersive-main .durak-game{padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.game-header{padding-top:calc(10px + env(safe-area-inset-top,0px))}
+@media(max-height:760px){
+  .immersive-main .felt-table{min-height:0;padding:12px 12px 34px}
+  .immersive-main .felt-table{flex:0 1 auto}
+  .immersive-main .own-hand{min-height:96px;padding-top:18px}
+  .immersive-main .durak-toolbar{margin-bottom:8px}
+  .immersive-main .opponents{margin-bottom:0}
+  .immersive-main .card-hint{display:none}
+}
+@media(max-height:560px){
+  .immersive-main .durak-toolbar h2{font-size:17px}
+  .immersive-main .durak-toolbar .eyebrow{display:none}
+  .immersive-main .felt-table{padding:8px 8px 26px}
+  .immersive-main .own-hand{min-height:88px}
+  .immersive-main .durak-controls .button{padding:9px 12px;min-height:38px}
+}
+@media(max-width:640px) and (orientation:landscape){
+  .immersive-main .opponents{display:none}
+  .immersive-main .felt-table{min-height:0;flex:0 1 auto;padding:8px 10px 26px}
+  .immersive-main .own-hand{min-height:84px}
+}

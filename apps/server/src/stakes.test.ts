@@ -11,7 +11,7 @@ afterEach(async () => { for (const instance of running.splice(0)) await instance
 type Bridge = StakesBridge & { getBalance: Mock; escrow: Mock; settle: Mock; refund: Mock; listReservedEscrows: Mock; claimPending: Mock };
 function bridge(overrides: Partial<StakesBridge> = {}): Bridge {
   return {
-    getBalance: vi.fn(async () => ({ balance: 1000, exists: true })),
+    getBalance: vi.fn(async () => ({ ok: true, balance: 1000, exists: true, writesEnabled: true })),
     escrow: vi.fn(async () => ({ ok: true as const, replayed: false })),
     settle: vi.fn(async () => ({ ok: true as const })),
     refund: vi.fn(async () => ({ ok: true as const })),
