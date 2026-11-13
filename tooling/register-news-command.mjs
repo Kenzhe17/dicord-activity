@@ -1,14 +1,15 @@
-// Registers the /news slash command for the Arcade application on the
-// allowed guild — one command only, never a bulk overwrite. Safe to re-run:
-// an existing /news command is updated in place (PATCH), otherwise created
-// (POST). Secrets are read from env and never printed.
+// Registers the /news slash command for the Arcade application on every
+// allowed guild — one command per guild, never a bulk overwrite. Safe to
+// re-run: an existing /news command is updated in place (PATCH), otherwise
+// created (POST). Secrets are read from env and never printed.
 // Usage: ARCADE_DISCORD_BOT_TOKEN=... ARCADE_DISCORD_CLIENT_ID=... \
-//   node tooling/register-news-command.mjs
+//   [ARCADE_ALLOWED_GUILD_ID=1196...,1535...] node tooling/register-news-command.mjs
 const token = process.env['ARCADE_DISCORD_BOT_TOKEN'];
 const appId = process.env['ARCADE_DISCORD_CLIENT_ID'];
-const guildId = process.env['ARCADE_ALLOWED_GUILD_ID'] || '1196165488565289012';
-if (!token || !appId) {
-  console.error('register-news-command: ARCADE_DISCORD_BOT_TOKEN and ARCADE_DISCORD_CLIENT_ID are required');
+const guildIds = (process.env['ARCADE_ALLOWED_GUILD_ID'] || '1196165488565289012,1535342238635270194')
+  .split(',').map(s => s.trim()).filter(s => /^[0-9]{17,20}$/.test(s));
+if (!token || !appId || guildIds.length === 0) {
+  console.error('register-news-command: ARCADE_DISCORD_BOT_TOKEN, ARCADE_DISCORD_CLIENT_ID and at least one valid guild id are required');
   process.exit(1);
 }
 const api = 'https://discord.com/api/v10';
@@ -34,29 +35,31 @@ async function apiCall(method, path, body) {
   return { ok: response.ok, status: response.status, data };
 }
 
-// 1. Look up existing commands — never overwrite the whole list.
-const list = await apiCall('GET', `/applications/${appId}/guilds/${guildId}/commands`);
-if (!list.ok) {
-  console.error(`register-news-command: failed to list guild commands (HTTP ${list.status})`, list.data?.message ?? '');
-  process.exit(1);
-}
-const existing = Array.isArray(list.data) ? list.data.find(c => c.name === 'news') : null;
+for (const guildId of guildIds) {
+  // 1. Look up existing commands — never overwrite the whole list.
+  const list = await apiCall('GET', `/applications/${appId}/guilds/${guildId}/commands`);
+  if (!list.ok) {
+    console.error(`register-news-command: failed to list guild commands for ${guildId} (HTTP ${list.status})`, list.data?.message ?? '');
+    process.exit(1);
+  }
+  const existing = Array.isArray(list.data) ? list.data.find(c => c.name === 'news') : null;
 
-// 2. Update in place or create — exactly one /news command results.
-const result = existing
-  ? await apiCall('PATCH', `/applications/${appId}/guilds/${guildId}/commands/${existing.id}`, definition)
-  : await apiCall('POST', `/applications/${appId}/guilds/${guildId}/commands`, definition);
-if (!result.ok) {
-  console.error(`register-news-command: ${existing ? 'update' : 'create'} failed (HTTP ${result.status})`, result.data?.message ?? '');
-  process.exit(1);
-}
-console.log(`register-news-command: /news ${existing ? 'updated' : 'created'} (id ${result.data?.id}, guild ${guildId})`);
+  // 2. Update in place or create — exactly one /news command results per guild.
+  const result = existing
+    ? await apiCall('PATCH', `/applications/${appId}/guilds/${guildId}/commands/${existing.id}`, definition)
+    : await apiCall('POST', `/applications/${appId}/guilds/${guildId}/commands`, definition);
+  if (!result.ok) {
+    console.error(`register-news-command: ${existing ? 'update' : 'create'} failed for ${guildId} (HTTP ${result.status})`, result.data?.message ?? '');
+    process.exit(1);
+  }
+  console.log(`register-news-command: /news ${existing ? 'updated' : 'created'} (id ${result.data?.id}, guild ${guildId})`);
 
-// 3. Verify via API that the command is actually registered.
-const verify = await apiCall('GET', `/applications/${appId}/guilds/${guildId}/commands`);
-const found = verify.ok && Array.isArray(verify.data) && verify.data.some(c => c.name === 'news');
-if (!found) {
-  console.error('register-news-command: verification failed — /news not visible via API');
-  process.exit(1);
+  // 3. Verify via API that the command is actually registered.
+  const verify = await apiCall('GET', `/applications/${appId}/guilds/${guildId}/commands`);
+  const found = verify.ok && Array.isArray(verify.data) && verify.data.some(c => c.name === 'news');
+  if (!found) {
+    console.error(`register-news-command: verification failed for ${guildId} — /news not visible via API`);
+    process.exit(1);
+  }
+  console.log(`register-news-command: verified — /news is registered for guild ${guildId}`);
 }
-console.log('register-news-command: verified — /news is registered for this guild');

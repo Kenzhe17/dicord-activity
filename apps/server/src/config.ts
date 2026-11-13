@@ -9,9 +9,10 @@ const schema = z.object({
   ARCADE_DISCORD_CLIENT_ID: z.string().regex(/^[0-9]{17,20}$/).optional(),
   ARCADE_DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
   ARCADE_DISCORD_BOT_TOKEN: z.string().min(1).optional(),
-  // Single-guild lockdown: when set (Discord auth mode), sessions are only
-  // issued inside this guild, verified server-side via the Activity Instances API.
-  ARCADE_ALLOWED_GUILD_ID: z.string().regex(/^[0-9]{17,20}$/).default('1196165488565289012'),
+  // Guild lockdown: when set (Discord auth mode), sessions are only issued
+  // inside these guilds, verified server-side via the Activity Instances API.
+  // Comma-separated list of Discord guild (server) snowflakes.
+  ARCADE_ALLOWED_GUILD_ID: z.string().regex(/^[0-9]{17,20}(,[0-9]{17,20})*$/).default('1196165488565289012,1535342238635270194').transform(v => v.split(',')),
   ARCADE_SERVER_INVITE_URL: z.string().max(300).optional(),
   // Discord Interactions (announcement button → LAUNCH_ACTIVITY). The public
   // key comes from the Developer Portal; it is not a secret.

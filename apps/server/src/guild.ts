@@ -39,7 +39,7 @@ export class DiscordGuildVerifier implements GuildVerifier {
   private appCheck: Promise<boolean> | null = null;
   constructor(
     private readonly botToken: string,
-    private readonly allowedGuildId: string,
+    private readonly allowedGuildIds: readonly string[],
     private readonly request: typeof fetch = fetch,
     private readonly onReject?: (reason: GuildRejectReason, detail?: Record<string, unknown>) => void,
     private readonly retryDelaysMs: readonly number[] = RETRY_DELAYS_MS,
@@ -104,7 +104,7 @@ export class DiscordGuildVerifier implements GuildVerifier {
       if (parsed.location?.kind !== undefined && parsed.location.kind !== 'gc') {
         return this.reject('guild_mismatch', { step: 'location_kind', kind: locationKind });
       }
-      if (locationGuild !== this.allowedGuildId) {
+      if (locationGuild === null || !this.allowedGuildIds.includes(locationGuild)) {
         return this.reject('guild_mismatch', { step: 'guild_id', kind: locationKind });
       }
       if (!parsed.users.includes(input.userId)) {
@@ -112,7 +112,7 @@ export class DiscordGuildVerifier implements GuildVerifier {
         if (attempt < this.retryDelaysMs.length) { await sleep(this.retryDelaysMs[attempt]!); continue; }
         return this.reject('user_not_present', { step: 'users', kind: locationKind, users: parsed.users.length });
       }
-      return { guildId: this.allowedGuildId, instanceId: input.instanceId };
+      return { guildId: locationGuild, instanceId: input.instanceId };
     }
   }
 }

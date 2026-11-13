@@ -41,17 +41,17 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
   const oauth = options.oauth ?? (config.ARCADE_AUTH_MODE === 'discord' ? new DiscordOAuthProvider(config.ARCADE_DISCORD_CLIENT_ID ?? '', config.ARCADE_DISCORD_CLIENT_SECRET ?? '') : undefined);
   // Single-guild lockdown applies to Discord-authenticated sessions only;
   // mock/dev auth stays available for local development and tests.
-  const guildId = config.ARCADE_ALLOWED_GUILD_ID;
-  const guildRestricted = config.ARCADE_AUTH_MODE === 'discord' && !!guildId;
+  const allowedGuildIds = config.ARCADE_ALLOWED_GUILD_ID;
+  const guildRestricted = config.ARCADE_AUTH_MODE === 'discord' && allowedGuildIds.length > 0;
   const guildVerifier: GuildVerifier | null = options.guildVerifier !== undefined
     ? options.guildVerifier
-    : guildRestricted && config.ARCADE_DISCORD_BOT_TOKEN && guildId
-      ? new DiscordGuildVerifier(config.ARCADE_DISCORD_BOT_TOKEN, guildId, fetch, (reason, detail) => app.log.warn({ event: 'guild_verify_rejected', reason, ...detail }, 'Guild verification rejected'))
+    : guildRestricted && config.ARCADE_DISCORD_BOT_TOKEN && allowedGuildIds.length
+      ? new DiscordGuildVerifier(config.ARCADE_DISCORD_BOT_TOKEN, allowedGuildIds, fetch, (reason, detail) => app.log.warn({ event: 'guild_verify_rejected', reason, ...detail }, 'Guild verification rejected'))
       : null;
   if (guildRestricted && !guildVerifier) app.log.error({ event: 'guild_verifier_missing' }, 'ARCADE_DISCORD_BOT_TOKEN is not configured; all Discord logins will be rejected');
   function guardSession(session: AuthSession): void {
     if (!guildRestricted) return;
-    if (!guildId || session.guildId !== guildId || !session.instanceId) {
+    if (!session.guildId || !allowedGuildIds.includes(session.guildId) || !session.instanceId) {
       throw new DomainError('GUILD_RESTRICTED', 'Arcade доступна только на официальном сервере r!z3');
     }
   }
@@ -213,7 +213,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     try { await db.$queryRaw`SELECT 1`; return { status: 'ok', persistence: 'postgresql', databaseConnected: true }; }
     catch { return reply.code(503).send({ status: 'not_ready', persistence: 'postgresql', databaseConnected: false }); }
   });
-  app.get('/api/config', async () => ({ authMode: config.ARCADE_AUTH_MODE, clientId: config.ARCADE_DISCORD_CLIENT_ID ?? null, persistence: 'postgresql', testGame: config.ARCADE_ENABLE_TEST_GAME, economy: !!economy, allowedGuildId: guildRestricted ? guildId : null, serverInviteUrl: isDiscordInviteUrl(config.ARCADE_SERVER_INVITE_URL) ? config.ARCADE_SERVER_INVITE_URL : null }));
+  app.get('/api/config', async () => ({ authMode: config.ARCADE_AUTH_MODE, clientId: config.ARCADE_DISCORD_CLIENT_ID ?? null, persistence: 'postgresql', testGame: config.ARCADE_ENABLE_TEST_GAME, economy: !!economy, allowedGuildIds: guildRestricted ? allowedGuildIds : [], serverInviteUrl: isDiscordInviteUrl(config.ARCADE_SERVER_INVITE_URL) ? config.ARCADE_SERVER_INVITE_URL : null }));
   app.get('/api/economy/balance', async req => {
     const player = await actor(req.headers.authorization);
     if (!economy) return { enabled: false };
@@ -262,7 +262,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
       }
       return reply;
     }
-    return interactionResponse(interaction, guildId ?? null);
+    return interactionResponse(interaction, guildRestricted ? allowedGuildIds : null);
   });
   const adminIds = () => new Set((config.ARCADE_ADMIN_USER_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean));
   // Public URL of the Durak news banner, served from the web bundle.
@@ -317,7 +317,7 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
       // re-verified against Discord's API with the application bot token.
       if (!guildVerifier || !instanceId) throw new DomainError('GUILD_RESTRICTED', 'Не удалось подтвердить сервер Activity');
       const confirmation = await guildVerifier.verify({ applicationId: config.ARCADE_DISCORD_CLIENT_ID ?? '', instanceId, userId: verified.player.id });
-      if (!confirmation || confirmation.guildId !== guildId || (claimedGuildId !== undefined && claimedGuildId !== guildId)) {
+      if (!confirmation || !allowedGuildIds.includes(confirmation.guildId) || (claimedGuildId !== undefined && claimedGuildId !== confirmation.guildId)) {
         throw new DomainError('GUILD_RESTRICTED', 'Arcade доступна только на официальном сервере r!z3');
       }
       binding = { guildId: confirmation.guildId, instanceId: confirmation.instanceId };

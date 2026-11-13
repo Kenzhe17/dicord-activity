@@ -10,6 +10,7 @@ import { DiscordGuildVerifier } from './guild';
 import type { GuildVerifier } from './guild';
 
 const ALLOWED = '1196165488565289012';
+const ALLOWED_SECOND = '1535342238635270194';
 const DISCORD_ID = '123456789012345678';
 const running: Awaited<ReturnType<typeof buildApp>>[] = [];
 afterEach(async () => { await Promise.all(running.splice(0).map(({ app }) => app.close())); });
@@ -58,13 +59,20 @@ describe('DiscordGuildVerifier', () => {
   const FAST = [1, 1, 1];
   const base = { applicationId: DISCORD_ID, instanceId: 'i-1', userId: DISCORD_ID };
   it('confirms a valid guild-channel instance with the user inside', async () => {
-    const v = new DiscordGuildVerifier('bot-token', ALLOWED, stub(okResponses));
+    const v = new DiscordGuildVerifier('bot-token', [ALLOWED], stub(okResponses));
     await expect(v.verify(base)).resolves.toEqual({ guildId: ALLOWED, instanceId: 'i-1' });
+  });
+  it('accepts every guild from the allowlist and reports the matched one', async () => {
+    const second = { ...instance, location: { ...instance.location, guild_id: ALLOWED_SECOND } };
+    const v = new DiscordGuildVerifier('bot-token', [ALLOWED, ALLOWED_SECOND], stub({ app: okResponses.app, instance: { body: second } }));
+    await expect(v.verify(base)).resolves.toEqual({ guildId: ALLOWED_SECOND, instanceId: 'i-1' });
+    const both = new DiscordGuildVerifier('bot-token', [ALLOWED, ALLOWED_SECOND], stub(okResponses));
+    await expect(both.verify(base)).resolves.toEqual({ guildId: ALLOWED, instanceId: 'i-1' });
   });
   it('rejects a bot token that does not belong to the Arcade application', async () => {
     const reasons: string[] = [];
     for (const app of [{ body: {}, status: 401 }, { body: { id: '000000000000000000' } }]) {
-      const v = new DiscordGuildVerifier('bad-token', ALLOWED, stub({ app, instance: okResponses.instance }), (r) => reasons.push(r));
+      const v = new DiscordGuildVerifier('bad-token', [ALLOWED], stub({ app, instance: okResponses.instance }), (r) => reasons.push(r));
       await expect(v.verify(base)).resolves.toBeNull();
     }
     expect(reasons).toContain('invalid_bot_token');
@@ -79,16 +87,16 @@ describe('DiscordGuildVerifier', () => {
       if (instanceCalls === 2) return new Response(JSON.stringify({ ...instance, users: [] }));
       return new Response(JSON.stringify(instance));
     }) as unknown as typeof fetch;
-    const v = new DiscordGuildVerifier('bot-token', ALLOWED, request, undefined, FAST);
+    const v = new DiscordGuildVerifier('bot-token', [ALLOWED], request, undefined, FAST);
     await expect(v.verify(base)).resolves.toEqual({ guildId: ALLOWED, instanceId: 'i-1' });
     expect(instanceCalls).toBe(3);
   });
   it('gives up after bounded retries with a diagnosable reason', async () => {
     const reasons: string[] = [];
-    const v = new DiscordGuildVerifier('bot-token', ALLOWED, stub({ app: okResponses.app, instance: { body: { ...instance, users: [] } } }), (r) => reasons.push(r), FAST);
+    const v = new DiscordGuildVerifier('bot-token', [ALLOWED], stub({ app: okResponses.app, instance: { body: { ...instance, users: [] } } }), (r) => reasons.push(r), FAST);
     await expect(v.verify(base)).resolves.toBeNull();
     expect(reasons).toContain('user_not_present');
-    const missing = new DiscordGuildVerifier('bot-token', ALLOWED, stub({ app: okResponses.app, instance: { body: {}, status: 404 } }), (r) => reasons.push(r), FAST);
+    const missing = new DiscordGuildVerifier('bot-token', [ALLOWED], stub({ app: okResponses.app, instance: { body: {}, status: 404 } }), (r) => reasons.push(r), FAST);
     await expect(missing.verify(base)).resolves.toBeNull();
     expect(reasons).toContain('discord_http_404');
   });
@@ -103,10 +111,10 @@ describe('DiscordGuildVerifier', () => {
       [{ broken: true }, 200],
     ];
     for (const [body, status] of cases) {
-      const v = new DiscordGuildVerifier('bot-token', ALLOWED, stub({ app: okResponses.app, instance: { body, status } }), undefined, FAST);
+      const v = new DiscordGuildVerifier('bot-token', [ALLOWED], stub({ app: okResponses.app, instance: { body, status } }), undefined, FAST);
       await expect(v.verify(base)).resolves.toBeNull();
     }
-    const offline = new DiscordGuildVerifier('bot-token', ALLOWED, vi.fn(async () => { throw new Error('down'); }) as unknown as typeof fetch, undefined, FAST);
+    const offline = new DiscordGuildVerifier('bot-token', [ALLOWED], vi.fn(async () => { throw new Error('down'); }) as unknown as typeof fetch, undefined, FAST);
     await expect(offline.verify(base)).resolves.toBeNull();
   });
 });
@@ -127,6 +135,14 @@ describe('guild-restricted Discord auth', () => {
     const stored = await sessions.get(session.token);
     expect(stored.guildId).toBe(ALLOWED);
     await app.inject({ method: 'DELETE', url: '/api/rooms/' + created.json<{ id: string }>().id, headers: auth });
+  });
+  it('issues a bound session for any guild on the allowlist', async () => {
+    const { app } = await createDiscordApp({ verify: async () => ({ guildId: ALLOWED_SECOND, instanceId: 'i-abc-gc-1-2' }) });
+    const login = await discordLogin(app);
+    expect(login.statusCode).toBe(200);
+    const session = login.json<AuthSession>();
+    expect(session.guildId).toBe(ALLOWED_SECOND);
+    expect((await app.inject({ url: '/api/bootstrap', headers: { authorization: 'Bearer ' + session.token } })).statusCode).toBe(200);
   });
   it('rejects login when Discord cannot confirm the allowed guild', async () => {
     for (const verifier of [
@@ -163,7 +179,7 @@ describe('guild-restricted Discord auth', () => {
     expect((await app.inject('/health/live')).statusCode).toBe(200);
     expect((await app.inject('/api/games')).statusCode).toBe(200);
     const config = await app.inject('/api/config');
-    expect(config.json()).toMatchObject({ allowedGuildId: ALLOWED, serverInviteUrl: 'https://discord.gg/rize3' });
+    expect(config.json()).toMatchObject({ allowedGuildIds: [ALLOWED, ALLOWED_SECOND], serverInviteUrl: 'https://discord.gg/rize3' });
     const bad = await createDiscordApp(okVerifier, { ARCADE_SERVER_INVITE_URL: 'https://evil.example/phish' });
     expect((await bad.app.inject('/api/config')).json()).toMatchObject({ serverInviteUrl: null });
   });

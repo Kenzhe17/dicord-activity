@@ -48,12 +48,12 @@ export function verifyDiscordSignature(publicKeyHex: string, timestamp: string, 
 
 /** Decides the interaction response. Only the arcade_launch button on a guild
  * component produces LAUNCH_ACTIVITY; everything else is acknowledged safely. */
-export function interactionResponse(interaction: DiscordInteraction, allowedGuildId: string | null): Record<string, unknown> {
+export function interactionResponse(interaction: DiscordInteraction, allowedGuildIds: readonly string[] | null): Record<string, unknown> {
   if (interaction.type === INTERACTION_PING) return { type: RESPONSE_PONG };
   if (interaction.type === INTERACTION_MESSAGE_COMPONENT && interaction.data?.custom_id === ARCADE_LAUNCH_CUSTOM_ID) {
     // The activity itself enforces the allowed guild; launching elsewhere only
     // reaches the restricted screen, so LAUNCH_ACTIVITY is always safe to send.
-    void allowedGuildId;
+    void allowedGuildIds;
     return { type: RESPONSE_LAUNCH_ACTIVITY };
   }
   return { type: RESPONSE_CHANNEL_MESSAGE, data: { content: 'Неизвестная команда.', flags: 64 } }; // ephemeral message

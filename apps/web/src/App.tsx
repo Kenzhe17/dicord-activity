@@ -21,7 +21,7 @@ import { PresenceManager, describePresence } from './presence';
 import type { PresenceLogEvent } from './presence';
 import { parseRoomInviteCode } from './roomAccess';
 
-interface PublicConfig { authMode: 'disabled' | 'mock' | 'discord'; clientId: string | null; persistence: string; testGame: boolean; economy?: boolean; allowedGuildId?: string | null; serverInviteUrl?: string | null }
+interface PublicConfig { authMode: 'disabled' | 'mock' | 'discord'; clientId: string | null; persistence: string; testGame: boolean; economy?: boolean; allowedGuildIds?: string[] | null; serverInviteUrl?: string | null }
 interface Bootstrap { session: AuthSession; room: RoomView | null; match: MatchView | null; preferences: Preferences }
 const icons = { durak: Spade, uno: Palette, mafia: VenetianMask, sandbox: FlaskConical };
 const navigation = [['home', 'Главная', House], ['games', 'Библиотека', Layers3], ['rooms', 'Комнаты', Users], ['profile', 'Профиль', UserRound], ['history', 'История', History], ['rankings', 'Рейтинги', Trophy], ['settings', 'Настройки', Settings]] as const;
@@ -80,7 +80,12 @@ export function App() {
     activity.current = getActivityClient(settings.clientId);
     // Guild gate runs before any authorization: wrong server, DM or external
     // browser never reaches the OAuth exchange or game data.
-    if (settings.allowedGuildId && !(await activity.current.checkGuild(settings.allowedGuildId))) { setRestricted(true); return; }
+    const allowedGuildIds = settings.allowedGuildIds ?? [];
+    if (allowedGuildIds.length > 0) {
+      let inside = false;
+      for (const id of allowedGuildIds) { if (await activity.current.checkGuild(id)) { inside = true; break; } }
+      if (!inside) { setRestricted(true); return; }
+    }
     const { state } = await post<{ state: string }>('/auth/challenge');
     const client = activity.current;
     const value = await client.login(state,
@@ -168,7 +173,7 @@ export function App() {
   })}</div></section>;
   const lobby = page === 'room' && room ? <Lobby games={games} run={run} busy={busy} onLeft={() => navigate('rooms')} discordInvite={config?.authMode === 'discord' && session ? { channel: channelInvite } : undefined}/> : null;
   const openExternalLink = (url: string) => { const client = activity.current; if (client) void client.openExternalLink(url).catch(() => {}); else window.open(url, '_blank', 'noopener'); };
-  if (restricted) return <GuildRestrictedScreen inviteUrl={config?.serverInviteUrl ?? null} guildId={config?.allowedGuildId ?? null} onInvite={openExternalLink}/>;
+  if (restricted) return <GuildRestrictedScreen inviteUrl={config?.serverInviteUrl ?? null} guildIds={config?.allowedGuildIds ?? null} onInvite={openExternalLink}/>;
   if (immersive) return <MotionConfig reducedMotion={preferences.reducedMotion ? 'always' : 'user'}><div className="immersive-shell"><main className="immersive-main">
     <header className="game-header"><ArcadeLogo className="game-brand"/><strong>{durakMode} дурак</strong><span className="game-header-meta">{room?.name}</span><span className="connection game-header-connection"><Radio size={13}/>{connection}</span></header>
     {error && <div role="alert" className="error">{error}<button aria-label="Закрыть сообщение" onClick={() => setError('')}>×</button></div>}
