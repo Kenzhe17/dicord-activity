@@ -16,6 +16,7 @@
     "@rize/codenames": "workspace:*",
     "@rize/database": "workspace:*",
     "@rize/discord": "workspace:*",
+    "@rize/codenames": "workspace:*",
     "@rize/durak": "workspace:*",
     "@rize/mafia": "workspace:*",
     "@rize/monopoly": "workspace:*",

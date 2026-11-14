@@ -8,8 +8,8 @@ useDefault = true
 [[rules]]
 id = "discord-client-id"
 [[rules.allowlists]]
-description = "Synthetic Discord application ID used by the injected OAuth test"
+description = "Synthetic Discord application ID used by the injected OAuth tests"
 condition = "AND"
-paths = ['''^apps/server/src/platform\.test\.ts$''']
+paths = ['''^apps/server/src/(platform|guild)\.test\.ts$''']
 regexTarget = "secret"
 regexes = ['''^123456789012345678$''']

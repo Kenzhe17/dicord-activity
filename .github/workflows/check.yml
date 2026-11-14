@@ -2,6 +2,11 @@ name: Arcade platform checks
 on:
   push:
   pull_request:
+# push and pull_request fire for the same head commit; group by that sha so the
+# duplicate run is cancelled instead of doubling CI minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

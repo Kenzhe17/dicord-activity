@@ -9,7 +9,7 @@ export const codenamesSettingsSchema = z.object({
   dictionary: z.string().regex(/^[a-z]{2,12}$/).default('ru'),
 }).strict();
 export const codenamesDefinition = {
-  info: {"id":"codenames","name":"Кодовые имена","description":"Две команды. Один шпион. Двадцать пять слов и одна тайна.","minPlayers":4,"maxPlayers":12,"status":"planned","modes":["Классика","Без лимита","На время","Предатель"]},
+  info: {"id":"codenames","name":"Слова","description":"Две команды. Один шпион. Двадцать пять слов и одна тайна.","minPlayers":4,"maxPlayers":12,"status":"planned","modes":["Классика","Без лимита","На время","Предатель"]},
   settingsSchema: codenamesSettingsSchema,
   getRoomCapacity: () => 12,
 } satisfies GameDefinition<z.infer<typeof codenamesSettingsSchema>>;

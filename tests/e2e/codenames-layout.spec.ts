@@ -5,15 +5,13 @@ import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { e2ePort, e2eDatabase } from './harness';
 
-const port = e2ePort(3005);
-const base = 'http://127.0.0.1:' + port;
+const base = 'http://127.0.0.1:3005';
 const VIEWPORTS = [[320, 568], [360, 640], [390, 844], [430, 932]] as const;
 
 async function startServer(databaseUrl: string) {
   const entry = `process.on('message', value => { if (value === 'shutdown') process.emit('SIGTERM'); }); process.once('SIGTERM', () => { if (process.connected) process.disconnect(); }); await import('./apps/server/dist/index.js');`;
-  const child = spawn(process.execPath, ['--input-type=module', '-e', entry], { env: { ...process.env, NODE_ENV: 'test', ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: databaseUrl, ARCADE_SERVE_WEB: 'true', ARCADE_ENABLE_TEST_GAME: 'false', ARCADE_ORIGIN: base, PORT: String(port), ARCADE_HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', entry], { env: { ...process.env, NODE_ENV: 'test', ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: databaseUrl, ARCADE_SERVE_WEB: 'true', ARCADE_ENABLE_TEST_GAME: 'false', ARCADE_ORIGIN: base, PORT: '3005', ARCADE_HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => { child.kill(); reject(new Error('Backend startup timeout')); }, 60000);
     child.once('error', error => { clearTimeout(timeout); reject(error); });
@@ -88,7 +86,7 @@ async function boardState(token: string): Promise<MatchView> { return activeMatc
 test('codenames layout: board fits mobile viewports, pick flow works', async ({ browser }) => {
   test.setTimeout(300000);
   const credentials = JSON.parse(await readFile(join(homedir(), '.rize3-arcade/local-postgres/connection.json'), 'utf8')) as { user: string; password: string; port: number };
-  const databaseUrl = 'postgresql://' + encodeURIComponent(credentials.user) + ':' + encodeURIComponent(credentials.password) + '@127.0.0.1:' + credentials.port + '/' + e2eDatabase() + '?schema=arcade';
+  const databaseUrl = 'postgresql://' + encodeURIComponent(credentials.user) + ':' + encodeURIComponent(credentials.password) + '@127.0.0.1:' + credentials.port + '/arcade_test?schema=arcade';
   const server = await startServer(databaseUrl);
   const problems: string[] = [];
   try {
