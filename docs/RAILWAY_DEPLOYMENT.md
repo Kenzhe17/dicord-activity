@@ -23,6 +23,8 @@ Railway поддерживает Dockerfile и проверяет readiness на
 | ARCADE_ORIGIN | https://APP_ID.discordsays.com |
 | ARCADE_DISCORD_CLIENT_ID | Application ID Arcade |
 | ARCADE_DISCORD_CLIENT_SECRET | Новый секрет только в variables |
+| ARCADE_DISCORD_BOT_TOKEN | Bot token приложения Arcade — обязателен при guild-lockdown: без него все Discord-логины отклоняются (`guild_verifier_missing`) |
+| ARCADE_ALLOWED_GUILD_ID | Snowflake'ы разрешённых Discord-серверов через запятую (дефолт — два r!z3-сервера; переопределять только при смене) |
 | ARCADE_DATABASE_URL | Reference на отдельный Arcade Postgres DATABASE_URL |
 | PORT | Назначается Railway |
 
@@ -69,7 +71,7 @@ Config-as-code файлы (`railway.toml`, `railway.migrate.toml`) удален�
 ## Проверка
 
 - /health/live и /health/ready: 200; /api/config: postgresql и discord.
-- /api/games: Дурак ready, UNO/Мафия planned; sandbox отсутствует, dev-вход запрещён.
+- /api/games: Дурак и UNO ready, Мафия planned; sandbox отсутствует, dev-вход запрещён.
 - Root HTML, /.proxy/assets, /.proxy/api/games доступны.
 - Выполнен [Discord checklist](DISCORD_SETUP.md), включая два аккаунта и WebSocket.
 - Рестарт службы восстанавливает комнаты.

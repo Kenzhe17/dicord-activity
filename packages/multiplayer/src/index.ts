@@ -5,7 +5,7 @@ import { z } from 'zod';
 const checkpointSchema = z.object({
   gameId: z.string(), stateVersion: z.number().int().positive(), version: z.number().int().nonnegative(),
   roomId: z.uuid(), matchId: z.uuid(), settings: z.unknown(), serialized: z.string(),
-  context: z.object({ players: z.array(z.string()).min(2).max(32), seed: z.number().int(), startedAt: z.number().finite().nonnegative() }),
+  context: z.object({ players: z.array(z.string()).min(2).max(32), seed: z.number().int(), startedAt: z.number().finite().nonnegative(), hostId: z.string().optional() }),
   actions: z.array(z.object({ requestId: z.uuid(), actorId: z.string(), version: z.number().int().positive(), now: z.number().finite().nonnegative(), action: z.unknown(), system: z.boolean().optional() })).max(100000),
 });
 export type MatchCheckpoint = z.infer<typeof checkpointSchema>;
@@ -48,7 +48,11 @@ export class MatchRuntime<State, Action, Settings, View> {
       return this.view(actorId);
     }
     if (envelope.expectedVersion !== this.version) throw new DomainError('CONFLICT', 'Устаревшая версия состояния');
-    if (!Number.isFinite(now) || now < (this.log.at(-1)?.now ?? this.context.startedAt)) throw new DomainError('INVALID_INPUT', 'Некорректное время действия');
+    if (!Number.isFinite(now)) throw new DomainError('INVALID_INPUT', 'Некорректное время действия');
+    // The journal must stay monotonic, but a backward wall-clock step (or a
+    // peer writer with an offset clock on a shared checkpoint) must not kill
+    // the match: clamp forward instead of rejecting every later action.
+    now = Math.max(now, this.log.at(-1)?.now ?? this.context.startedAt);
     if (this.module.isFinished(this.state)) throw new DomainError('CONFLICT', 'Матч завершён');
     if (this.log.length >= 100000) throw new DomainError('CONFLICT', 'Превышен лимит действий матча');
     const actionContext = { actorId, now };
@@ -67,7 +71,8 @@ export class MatchRuntime<State, Action, Settings, View> {
   }
   dispatchSystem(requestId: string, action: unknown, now: number): void {
     if (!this.module.applySystemAction || this.module.isFinished(this.state)) throw new DomainError('CONFLICT', 'Системное действие недоступно');
-    if (this.log.length >= 100000 || !Number.isFinite(now) || now < (this.log.at(-1)?.now ?? this.context.startedAt)) throw new DomainError('CONFLICT', 'Некорректное системное событие');
+    if (this.log.length >= 100000 || !Number.isFinite(now)) throw new DomainError('CONFLICT', 'Некорректное системное событие');
+    now = Math.max(now, this.log.at(-1)?.now ?? this.context.startedAt);
     if (this.requests.has(requestId)) throw new DomainError('CONFLICT', 'Повторное системное событие');
     const next = this.module.stateSchema.parse(this.module.applySystemAction(structuredClone(this.state), action, now));
     this.state = next; this.version++;

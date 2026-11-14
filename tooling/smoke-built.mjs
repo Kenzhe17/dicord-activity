@@ -28,7 +28,7 @@ try {
   const games = await (await globalThis.fetch(base + '/.proxy/api/games')).json();
   assert.equal(games.some(game => game.id === 'sandbox'), false);
   assert.equal(games.find(game => game.id === 'durak')?.status, 'ready');
-  assert.equal(games.find(game => game.id === 'uno')?.status, 'planned');
+  assert.equal(games.find(game => game.id === 'uno')?.status, 'ready');
   assert.equal(games.find(game => game.id === 'mafia')?.status, 'planned');
   const html = await globalThis.fetch(base + '/');
   assert.equal(html.status, 200);
@@ -37,7 +37,7 @@ try {
   const asset = source.match(/src="([^"]+\.js)"/)?.[1];
   assert.ok(asset);
   assert.equal((await globalThis.fetch(base + asset)).status, 200);
-  console.log('Built production smoke passed: PostgreSQL ready, Durak available, UNO/Mafia planned, sandbox hidden, static HTML/assets and /.proxy API served, Discord framing enabled.');
+  console.log('Built production smoke passed: PostgreSQL ready, Durak and UNO available, Mafia planned, sandbox hidden, static HTML/assets and /.proxy API served, Discord framing enabled.');
 } finally {
   if (child.exitCode === null && child.signalCode === null) {
     const exit = once(child, 'exit');

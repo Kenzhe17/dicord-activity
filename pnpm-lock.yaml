@@ -123,6 +123,9 @@ importers:
       '@rize/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@rize/uno':
+        specifier: workspace:*
+        version: link:../../games/uno
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.3.1)
