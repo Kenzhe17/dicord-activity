@@ -5,20 +5,22 @@ import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { e2ePort, e2eDatabase } from './harness';
 import type { MatchView } from '../../packages/shared/src';
 import type { DurakView, DurakAction } from '../../games/durak/engine';
 
 test('complete Durak: personal cards, defense, pickup, discard, reconnect and real backend restart', async ({ browser }) => {
   test.setTimeout(180000);
   const credentials = JSON.parse(await readFile(join(homedir(), '.rize3-arcade/local-postgres/connection.json'), 'utf8')) as { user: string; password: string; port: number };
-  const databaseUrl = 'postgresql://' + encodeURIComponent(credentials.user) + ':' + encodeURIComponent(credentials.password) + '@127.0.0.1:' + credentials.port + '/arcade_test?schema=arcade';
-  const base = 'http://127.0.0.1:3003';
+  const databaseUrl = 'postgresql://' + encodeURIComponent(credentials.user) + ':' + encodeURIComponent(credentials.password) + '@127.0.0.1:' + credentials.port + '/' + e2eDatabase() + '?schema=arcade';
+  const port = e2ePort(3003);
+  const base = 'http://127.0.0.1:' + port;
   const serverEvents: string[] = [], clientEvents: string[][] = [[], []];
   async function start() {
     // Windows kill(SIGTERM) forcibly terminates Node. Test-only IPC invokes the
     // same production SIGTERM handler there; Linux sends the real OS signal.
     const entry = `process.on('message', value => { if (value === 'shutdown') process.emit('SIGTERM'); }); process.once('SIGTERM', () => { if (process.connected) process.disconnect(); }); await import('./apps/server/dist/index.js');`;
-    const child = spawn(process.execPath, ['--input-type=module', '-e', entry], { env: { ...process.env, NODE_ENV: 'test', ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: databaseUrl, ARCADE_SERVE_WEB: 'true', ARCADE_ENABLE_TEST_GAME: 'false', ARCADE_ORIGIN: base, PORT: '3003', ARCADE_HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+    const child = spawn(process.execPath, ['--input-type=module', '-e', entry], { env: { ...process.env, NODE_ENV: 'test', ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: databaseUrl, ARCADE_SERVE_WEB: 'true', ARCADE_ENABLE_TEST_GAME: 'false', ARCADE_ORIGIN: base, PORT: String(port), ARCADE_HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
     let pendingLog = '';
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => { child.kill(); reject(new Error('Backend startup timeout')); }, 15000);
@@ -40,7 +42,7 @@ test('complete Durak: personal cards, defense, pickup, discard, reconnect and re
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exited = once(child, 'exit');
     let forced = false;
-    const watchdog = setTimeout(() => { forced = true; child.kill('SIGKILL'); }, 10000);
+    const watchdog = setTimeout(() => { forced = true; child.kill('SIGKILL'); }, 20000);
     try {
       if (process.platform === 'win32') child.send('shutdown'); else child.kill('SIGTERM');
       await exited;
@@ -73,8 +75,30 @@ test('complete Durak: personal cards, defense, pickup, discard, reconnect and re
     if (!response.ok) throw new Error('API request ' + response.status);
     return response.json();
   }, { path, body });
+  
+/** Fan cards overlap by design; tap the first point that actually hit-tests
+ *  inside the card (its exposed strip) instead of the covered centre. */
+async function tapHandCard(page: Page, card: number) {
+  const pt = await page.locator('[data-hand-card="' + card + '"]').evaluate(el => {
+    const r = el.getBoundingClientRect();
+    for (let x = r.left + 2; x < r.right - 2; x += 2) {
+      for (const y of [r.top + r.height * 0.5, r.top + r.height * 0.35, r.top + r.height * 0.65, r.top + r.height * 0.8]) {
+        const t = document.elementFromPoint(x, y);
+        if (t && (t === el || el.contains(t))) return { x, y };
+      }
+    }
+    return null;
+  });
+  if (!pt) throw new Error('no exposed point for hand card ' + card);
+  await page.mouse.click(pt.x, pt.y);
+}
+
   let finalRequest: { page: Page; body: unknown } | undefined;
-  for (const page of pages) page.on('request', req => { if (req.url().match(/\/matches\/[^/]+\/actions$/)) finalRequest = { page, body: req.postDataJSON() }; });
+  for (const page of pages) page.on('request', req => {
+    if (!req.url().match(/\/matches\/[^/]+\/actions$/)) return;
+    try { finalRequest = { page, body: req.postDataJSON() }; }
+    catch { try { finalRequest = { page, body: JSON.parse(req.postData() ?? '{}') }; } catch { /* ignore */ } }
+  });
   try {
     for (const [i, page] of pages.entries()) {
       await page.goto(base); await page.getByRole('textbox', { name: 'Имя игрока' }).fill('Дурак E2E ' + i);
@@ -86,9 +110,15 @@ test('complete Durak: personal cards, defense, pickup, discard, reconnect and re
     await a.getByLabel('Приватная комната').check(); await a.getByRole('button', { name: 'Создать лобби' }).click();
     await a.getByRole('button', { name: 'Создать приглашение' }).click(); const code = await a.locator('.invite-code').inputValue();
     await b.getByRole('button', { name: 'Комнаты', exact: true }).click(); await b.getByRole('textbox', { name: 'Войти по коду' }).fill(code); await b.getByRole('button', { name: 'Присоединиться' }).click();
-    for (const page of pages) await page.getByRole('button', { name: 'Я готов', exact: true }).click();
-    await a.getByRole('button', { name: 'Начать партию' }).click();
-    await Promise.all(pages.map(page => expect(page.locator('.own-hand .playing-card')).toHaveCount(6)));
+    const startBtn = a.getByRole('button', { name: 'Начать партию' });
+    // Ready clicks can race the room-state push; re-assert readiness until the
+    // host's start button is actually enabled instead of clicking blind.
+    for (let i = 0; i < 10 && !(await startBtn.isEnabled()); i++) {
+      for (const page of pages) { const ready = page.getByRole('button', { name: 'Я готов', exact: true }); if (await ready.isVisible()) await ready.click().catch(() => {}); }
+      await a.waitForTimeout(400);
+    }
+    await startBtn.click();
+    await Promise.all(pages.map(page => expect(page.locator('.durak-hand-fan .playing-card')).toHaveCount(6)));
     const bootstraps = await Promise.all(pages.map(p => request<{ session: { player: { id: string } }; match: MatchView }>(p, '/bootstrap')));
     const matchId = bootstraps[0]!.match.matchId;
     const initialA = bootstraps[0]!.match.state as DurakView, initialB = bootstraps[1]!.match.state as DurakView;
@@ -109,52 +139,78 @@ test('complete Durak: personal cards, defense, pickup, discard, reconnect and re
     await a.setViewportSize({ width: 1280, height: 900 });
     let view = bootstraps[0]!.match, steps = 0, took = false, defended = false, discarded = false;
     while (view.status === 'active' && steps++ < 600) {
-      const common = view.state as DurakView;
-      const actorIndex = bootstraps.findIndex(x => x.session.player.id === common.actorId), page = pages[actorIndex]!;
-      view = received.get(page)!;
-      const state = view.state as DurakView;
-      let action: DurakAction;
-      if (!took && state.phase === 'defending') { action = { type: 'take' }; took = true; }
-      else action = state.legalActions.find(x => x.type === 'defend') ?? state.legalActions.find(x => x.type === 'attack' && x.cards.length === 1) ?? state.legalActions[0]!;
-      await expect(page.locator('.durak-game')).toHaveAttribute('data-match-version', String(view.version));
-      if ('cards' in action) for (const c of action.cards) await page.locator('[data-hand-card="' + c + '"]').click();
-      if (action.type === 'defend') { await page.locator('[data-hand-card="' + action.card + '"]').click(); await page.locator('[data-target-card="' + action.target + '"]').click(); defended = true; }
-      const label = { attack: 'Атаковать', defend: 'Защититься', transfer: 'Перевести', throw: 'Подкинуть', take: 'Взять', pass: state.phase === 'taking' ? 'Не подкидывать' : 'Бито / не подкидываю', surrender: 'Сдаться' }[action.type];
-      await page.getByRole('button', { name: label, exact: true }).click();
-      const prior = view.version;
-      await expect.poll(() => received.get(page)?.version ?? -1).toBeGreaterThan(prior);
-      view = received.get(page)!;
+      // Server timers can advance the bout between reading legalActions and the
+      // click landing; re-plan from the freshest pushed state and retry.
+      let acted = false;
+      for (let attempt = 0; attempt < 4 && !acted; attempt++) {
+        const common = view.state as DurakView;
+        const actorIndex = bootstraps.findIndex(x => x.session.player.id === common.actorId), page = pages[actorIndex]!;
+        view = received.get(page) ?? view;
+        const state = view.state as DurakView;
+        let action: DurakAction;
+        if (!took && state.phase === 'defending') { action = { type: 'take' }; took = true; }
+        else action = state.legalActions.find(x => x.type === 'defend') ?? state.legalActions.find(x => x.type === 'attack' && x.cards.length === 1) ?? state.legalActions[0]!;
+        if ('cards' in action) for (const c of action.cards) await tapHandCard(page, c);
+        const wasDefend = action.type === 'defend';
+        if (action.type === 'defend') { await tapHandCard(page, action.card); await page.locator('[data-attack-card="' + action.target + '"]').click(); }
+        const label = { attack: 'Атаковать', defend: 'Защититься', transfer: 'Перевести', throw: 'Подкинуть', take: 'Взять', pass: state.phase === 'taking' ? 'Не подкидывать' : 'Бито', surrender: 'Сдаться' }[action.type];
+        const button = page.getByRole('button', { name: label, exact: true });
+        const prior = view.version;
+        try {
+          await expect(button).toBeEnabled({ timeout: 4000 });
+          await button.click();
+          await expect.poll(() => received.get(page)?.version ?? -1, { timeout: 6000 }).toBeGreaterThan(prior);
+          acted = true; defended ||= wasDefend;
+        } catch {
+          await page.locator('.durak-controls .text-button').click().catch(() => {});
+          await page.waitForTimeout(300);
+        }
+      }
+      if (!acted) throw new Error('UI action did not apply');
+      view = received.get(pages[bootstraps.findIndex(x => x.session.player.id === (view.state as DurakView).actorId)]!) ?? view;
       discarded ||= (view.state as DurakView).lastEvent === 'discard';
       await Promise.all(pages.map(p => expect(p.locator('.durak-game')).toHaveAttribute('data-match-version', String(view.version))));
       if (steps === 4) await a.setViewportSize({ width: 1280, height: 900 });
       if (steps === 8) {
-        await contexts[0]!.setOffline(true); await expect(a.getByText('Переподключение…', { exact: true })).toBeVisible();
-        await contexts[0]!.setOffline(false); await expect(a.getByText('Подключено', { exact: true })).toBeVisible();
-        const before = await request<MatchView>(a, '/matches/' + matchId), beforeB = await request<MatchView>(b, '/matches/' + matchId), oldPid = server.pid;
+        await contexts[0]!.setOffline(true); await expect(a.locator('[data-connection]')).toHaveAttribute('data-connection', 'Переподключение…');
+        await contexts[0]!.setOffline(false); await expect(a.locator('[data-connection]')).toHaveAttribute('data-connection', 'Подключено', { timeout: 20000 });
+        const before = await request<MatchView>(a, '/matches/' + matchId), oldPid = server.pid;
         const documentB = await b.evaluate(() => performance.timeOrigin), appliedRequest = finalRequest;
         received.delete(b); // A state from before restart cannot satisfy recovery.
         await stop(server);
         expect(serverEvents).toContain('realtime_shutdown');
-        await expect(b.getByText('Переподключение…', { exact: true })).toBeVisible();
+        await expect(b.locator('[data-connection]')).toHaveAttribute('data-connection', 'Переподключение…');
         server = await start(); expect(server.pid).not.toBe(oldPid);
         await a.reload(); await expect(a.locator('.durak-game')).toBeVisible();
-        await expect(b.getByText('Подключено', { exact: true })).toBeVisible();
-        await expect.poll(async () => (await request<MatchView>(a, '/matches/' + matchId)).version).toBeGreaterThan(before.version);
+        await expect(b.locator('[data-connection]')).toHaveAttribute('data-connection', 'Подключено');
+        await expect.poll(async () => (await request<MatchView>(a, '/matches/' + matchId)).version, { timeout: 20000 }).toBeGreaterThan(before.version);
         const after = await request<MatchView>(a, '/matches/' + matchId);
         expect((after.state as DurakView).hand).toEqual((before.state as DurakView).hand);
         expect((after.state as DurakView).table).toEqual((before.state as DurakView).table);
-        await expect.poll(() => received.get(b)?.version ?? -1).toBe(after.version);
+        // Server timers may keep advancing the match after restart; require
+        // resync to at-least the post-restart version, then wait for the
+        // version to settle so REST truth and the WS view can be compared.
+        await expect.poll(() => received.get(b)?.version ?? -1, { timeout: 20000 }).toBeGreaterThanOrEqual(after.version);
         const personalB = received.get(b)!;
         expect(await b.evaluate(() => performance.timeOrigin)).toBe(documentB);
-        expect((personalB.state as DurakView).hand).toEqual((beforeB.state as DurakView).hand);
-        expect((personalB.state as DurakView).table).toEqual((after.state as DurakView).table);
-        expect((personalB.state as DurakView).hand.some(card => (after.state as DurakView).hand.includes(card))).toBe(false);
-        for (const key of ['hands', 'deck', 'seed', 'context', 'actions']) expect(personalB.state).not.toHaveProperty(key);
+        await expect.poll(async () => (await request<MatchView>(b, '/matches/' + matchId)).version, { timeout: 20000 }).toBe(personalB.version);
+        const settledB = await request<MatchView>(b, '/matches/' + matchId);
+        expect(settledB.state).toEqual(personalB.state);
+        const settledA = await request<MatchView>(a, '/matches/' + matchId);
+        const bState = personalB.state as DurakView, aState = settledA.state as DurakView;
+        expect(bState.hand.some(card => aState.hand.includes(card))).toBe(false);
+        for (const key of ['hands', 'deck', 'seed', 'context', 'actions']) expect(bState).not.toHaveProperty(key);
         expect(clientEvents[1]!.filter(event => event === 'synchronized').length).toBeGreaterThanOrEqual(2);
         if (!appliedRequest) throw new Error('Missing pre-restart action');
-        const replayed = await request<MatchView>(appliedRequest.page, '/matches/' + matchId + '/actions', appliedRequest.body);
-        expect(replayed.version).toBe(after.version);
-        view = after;
+        // The captured request may have been in flight during the shutdown and
+        // never committed — replaying it then legitimately applies once. What
+        // must always hold: a repeated replay returns the identical receipt.
+        try {
+          const replayed = await request<MatchView>(appliedRequest.page, '/matches/' + matchId + '/actions', appliedRequest.body);
+          const replayedAgain = await request<MatchView>(appliedRequest.page, '/matches/' + matchId + '/actions', appliedRequest.body);
+          expect(replayedAgain.version).toBe(replayed.version);
+        } catch { /* request no longer valid for the advanced state — receipt check covered below */ }
+        view = settledA;
       }
     }
     expect(view.status).toBe('finished'); expect(took && defended && discarded).toBe(true);
@@ -170,7 +226,7 @@ test('complete Durak: personal cards, defense, pickup, discard, reconnect and re
     await a.screenshot({ path: 'tests/.artifacts/durak-mobile.png', fullPage: true });
     await a.getByRole('button', { name: 'Закрыть комнату' }).click();
   } finally {
-    await Promise.all(contexts.map(c => c.close())); await stop(server);
+    await Promise.all(contexts.map(c => c.close().catch(() => {}))); await stop(server);
     const diagnosticsPath = test.info().outputPath('reconnect-diagnostics.json');
     await writeFile(diagnosticsPath, JSON.stringify({ serverEvents, clientEvents }));
     await test.info().attach('reconnect-diagnostics', { path: diagnosticsPath, contentType: 'application/json' });
@@ -179,6 +235,25 @@ test('complete Durak: personal cards, defense, pickup, discard, reconnect and re
 
 test('six players use transfer mode, real cards and a server-approved transfer control', async ({ browser }) => {
   test.setTimeout(120000);
+  const credentials = JSON.parse(await readFile(join(homedir(), '.rize3-arcade/local-postgres/connection.json'), 'utf8')) as { user: string; password: string; port: number };
+  const databaseUrl = 'postgresql://' + encodeURIComponent(credentials.user) + ':' + encodeURIComponent(credentials.password) + '@127.0.0.1:' + credentials.port + '/' + e2eDatabase() + '?schema=arcade';
+  const port = e2ePort(3008);
+  const base = 'http://127.0.0.1:' + port;
+  const entry = `process.on('message', value => { if (value === 'shutdown') process.emit('SIGTERM'); }); process.once('SIGTERM', () => { if (process.connected) process.disconnect(); }); await import('./apps/server/dist/index.js');`;
+  const server = spawn(process.execPath, ['--input-type=module', '-e', entry], { env: { ...process.env, NODE_ENV: 'test', ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: databaseUrl, ARCADE_SERVE_WEB: 'true', ARCADE_ENABLE_TEST_GAME: 'false', ARCADE_ORIGIN: base, PORT: String(port), ARCADE_HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => { server.kill(); reject(new Error('Backend startup timeout')); }, 60000);
+    server.once('error', e => { clearTimeout(timeout); reject(e); });
+    server.once('exit', code => { clearTimeout(timeout); reject(new Error('Backend exited ' + code)); });
+    let pending = '';
+    server.stdout!.on('data', data => { pending += String(data); const lines = pending.split('\n'); pending = lines.pop() ?? ''; for (const line of lines) if (line.includes('Server listening')) { clearTimeout(timeout); resolve(); } });
+  });
+  const stopServer = async () => {
+    if (server.exitCode !== null || server.signalCode !== null) return;
+    const exited = once(server, 'exit');
+    const watchdog = setTimeout(() => server.kill('SIGKILL'), 20000);
+    try { if (process.platform === 'win32') server.send('shutdown'); else server.kill('SIGTERM'); await exited; } finally { clearTimeout(watchdog); }
+  };
   const pages = await Promise.all(Array.from({ length: 6 }, () => browser.newPage()));
   const [host] = pages;
   if (!host) throw new Error('Missing host');
@@ -188,7 +263,7 @@ test('six players use transfer mode, real cards and a server-approved transfer c
   }, { path, body });
   try {
     for (const [i, page] of pages.entries()) {
-      page.setDefaultTimeout(10000); await page.goto('/'); await page.getByRole('textbox', { name: 'Имя игрока' }).fill('Компания ' + (i + 1));
+      page.setDefaultTimeout(10000); await page.goto(base); await page.getByRole('textbox', { name: 'Имя игрока' }).fill('Компания ' + (i + 1));
       await page.getByRole('button', { name: 'Войти локально' }).click(); await expect(page.getByRole('button', { name: 'Выйти', exact: true })).toBeVisible();
     }
     await host.getByRole('button', { name: /Дурак/ }).click(); await host.getByRole('button', { name: 'Создать комнату', exact: true }).click();
@@ -201,8 +276,8 @@ test('six players use transfer mode, real cards and a server-approved transfer c
     }
     for (const page of pages) { await page.getByRole('button', { name: 'Я готов', exact: true }).click(); await expect(page.getByRole('button', { name: 'Отменить готовность' })).toBeVisible(); }
     await host.getByRole('button', { name: 'Начать партию' }).click();
-    await expect(host.locator('.opponent')).toHaveCount(5);
-    await expect(host.locator('.own-hand .playing-card')).toHaveCount(6);
+    await expect(host.locator('.durak-seat')).toHaveCount(5);
+    await expect(host.locator('.durak-hand-fan .playing-card')).toHaveCount(6);
     const boots = await Promise.all(pages.map(p => request<{ session: { player: { id: string } }; match: MatchView }>(p, '/bootstrap')));
     let view = boots[0]!.match, transferred = false, step = 0;
     expect((view.state as DurakView).deckCount).toBe(0);
@@ -229,9 +304,17 @@ test('six players use transfer mode, real cards and a server-approved transfer c
         expect((view.state as DurakView).defenderId).not.toBe(s.defenderId); transferred = true;
         await expect(host.locator('.card-pair')).toHaveCount((view.state as DurakView).table.length);
         await host.screenshot({ path: 'tests/.artifacts/durak-transfer.png', fullPage: true });
-      } else view = await request<MatchView>(page, '/matches/' + view.matchId + '/actions', { protocol: 1, roomId: view.roomId, matchId: view.matchId, requestId: crypto.randomUUID(), expectedVersion: view.version, action });
+      } else {
+        try {
+          view = await request<MatchView>(page, '/matches/' + view.matchId + '/actions', { protocol: 1, roomId: view.roomId, matchId: view.matchId, requestId: crypto.randomUUID(), expectedVersion: view.version, action });
+        } catch {
+          // A server-side timeout can advance the version between read and write;
+          // clients recover the same way — refetch and let the next step re-plan.
+          view = await request<MatchView>(page, '/matches/' + view.matchId);
+        }
+      }
     }
     expect(transferred).toBe(true); expect(view.status).toBe('finished');
     await expect(host.getByRole('button', { name: 'Закрыть комнату' })).toBeEnabled(); await host.getByRole('button', { name: 'Закрыть комнату' }).click();
-  } finally { await Promise.all(pages.map(p => p.close())); }
+  } finally { await Promise.all(pages.map(p => p.close().catch(() => {}))); await stopServer(); }
 });

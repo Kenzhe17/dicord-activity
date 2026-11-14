@@ -5,11 +5,13 @@ import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { e2ePort, e2eDatabase } from './harness';
 import type { MatchView } from '../../packages/shared/src';
 import type { DurakView } from '../../games/durak/engine';
 import { rank, suit } from '../../games/durak/engine/cards';
 
-const base = 'http://127.0.0.1:3004';
+const port = e2ePort(3004);
+const base = 'http://127.0.0.1:' + port;
 
 function sortExpected(hand: number[], mode: string, trump: number): number[] {
   const cards = [...hand];
@@ -22,7 +24,7 @@ function sortExpected(hand: number[], mode: string, trump: number): number[] {
 
 async function startServer(databaseUrl: string) {
   const entry = `process.on('message', value => { if (value === 'shutdown') process.emit('SIGTERM'); }); process.once('SIGTERM', () => { if (process.connected) process.disconnect(); }); await import('./apps/server/dist/index.js');`;
-  const child = spawn(process.execPath, ['--input-type=module', '-e', entry], { env: { ...process.env, NODE_ENV: 'test', ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: databaseUrl, ARCADE_SERVE_WEB: 'true', ARCADE_ENABLE_TEST_GAME: 'false', ARCADE_ORIGIN: base, PORT: '3004', ARCADE_HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', entry], { env: { ...process.env, NODE_ENV: 'test', ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_DATABASE_URL: databaseUrl, ARCADE_SERVE_WEB: 'true', ARCADE_ENABLE_TEST_GAME: 'false', ARCADE_ORIGIN: base, PORT: String(port), ARCADE_HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => { child.kill(); reject(new Error('Backend startup timeout')); }, 15000);
     child.once('error', error => { clearTimeout(timeout); reject(error); });
@@ -48,10 +50,10 @@ async function stopServer(child: ReturnType<typeof spawn>) {
   } finally { clearTimeout(watchdog); }
 }
 
-test('durak mobile: hand sorting, edge scroll, selection kept, viewport fit, large hand', async ({ browser }) => {
+test('durak mobile: hand sorting, fan fit, selection kept, viewport fit, large hand', async ({ browser }) => {
   test.setTimeout(300000);
   const credentials = JSON.parse(await readFile(join(homedir(), '.rize3-arcade/local-postgres/connection.json'), 'utf8')) as { user: string; password: string; port: number };
-  const databaseUrl = 'postgresql://' + encodeURIComponent(credentials.user) + ':' + encodeURIComponent(credentials.password) + '@127.0.0.1:' + credentials.port + '/arcade_test?schema=arcade';
+  const databaseUrl = 'postgresql://' + encodeURIComponent(credentials.user) + ':' + encodeURIComponent(credentials.password) + '@127.0.0.1:' + credentials.port + '/' + e2eDatabase() + '?schema=arcade';
   const server = await startServer(databaseUrl);
   const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
   const pages = await Promise.all(contexts.map(c => c.newPage()));
@@ -67,7 +69,7 @@ test('durak mobile: hand sorting, edge scroll, selection kept, viewport fit, lar
     }
     throw new Error('API rate limited');
   }, { path, body });
-  const handOrder = (page: Page) => page.locator('.own-hand [data-hand-card]').evaluateAll(els => els.map(el => Number((el as HTMLElement).dataset['handCard'])));
+  const handOrder = (page: Page) => page.locator('.durak-hand-fan [data-hand-card]').evaluateAll(els => els.map(el => Number((el as HTMLElement).dataset['handCard'])));
   try {
     for (const [i, page] of pages.entries()) {
       await page.goto(base); await page.getByRole('textbox', { name: 'Имя игрока' }).fill('Мобильный ' + i);
@@ -80,9 +82,10 @@ test('durak mobile: hand sorting, edge scroll, selection kept, viewport fit, lar
     await b.getByRole('button', { name: 'Комнаты', exact: true }).click(); await b.getByRole('textbox', { name: 'Войти по коду' }).fill(code); await b.getByRole('button', { name: 'Присоединиться' }).click();
     for (const page of pages) await page.getByRole('button', { name: 'Я готов', exact: true }).click();
     await a.getByRole('button', { name: 'Начать партию' }).click();
-    await Promise.all(pages.map(page => expect(page.locator('.own-hand .playing-card')).toHaveCount(6)));
+    await Promise.all(pages.map(page => expect(page.locator('.durak-hand-fan .playing-card')).toHaveCount(6)));
 
-    // --- Sorting ---
+    // --- Sorting (inside the corner menu) ---
+    await a.getByRole('button', { name: 'Меню партии' }).click();
     const boot = await request<{ session: { player: { id: string } }; room: { id: string }; match: MatchView }>(a, '/bootstrap');
     let state = boot.match.state as DurakView;
     const trump = state.trump;
@@ -124,6 +127,7 @@ test('durak mobile: hand sorting, edge scroll, selection kept, viewport fit, lar
       if (selectedCard === null) await a.waitForTimeout(400);
     }
     if (selectedCard !== null) {
+      await a.getByRole('button', { name: 'Меню партии' }).click();
       await a.getByRole('button', { name: 'Как получены', exact: true }).click();
       await a.getByRole('button', { name: 'По мастям', exact: true }).click();
       await expect(a.locator('[data-hand-card="' + selectedCard + '"]')).toHaveAttribute('aria-pressed', 'true');
@@ -132,7 +136,7 @@ test('durak mobile: hand sorting, edge scroll, selection kept, viewport fit, lar
 
     // --- Persistence across reload ---
     await a.reload();
-    await expect(a.locator('.own-hand .playing-card').first()).toBeVisible();
+    await expect(a.locator('.durak-hand-fan .playing-card').first()).toBeVisible();
     expect(await a.evaluate(() => localStorage.getItem('rize.arcade.durak.handSort'))).toBe('suit');
 
     // --- Mobile viewport matrix ---
@@ -142,7 +146,7 @@ test('durak mobile: hand sorting, edge scroll, selection kept, viewport fit, lar
       await expect(a.locator('.durak-game')).toBeVisible();
       const fit = await a.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth }));
       expect(fit.sw <= fit.iw, JSON.stringify(fit)).toBe(true);
-      await expect(a.locator('.own-hand')).toBeVisible();
+      await expect(a.locator('.durak-hand-measure')).toBeVisible();
       await expect(a.locator('.durak-controls')).toBeVisible();
       await a.screenshot({ path: `tests/.artifacts/durak-mobile-${width}x${height}.png` });
     }
@@ -154,22 +158,20 @@ test('durak mobile: hand sorting, edge scroll, selection kept, viewport fit, lar
     await a.screenshot({ path: 'tests/.artifacts/durak-mobile-landscape.png' });
     await a.setViewportSize({ width: 390, height: 844 });
 
-    // --- Edge scroll buttons at 320px ---
+    // --- Fan fit at 320px: no scroll, every card inside the viewport ---
     await a.setViewportSize({ width: 320, height: 568 });
     await a.waitForTimeout(200);
-    const rightBtn = a.getByRole('button', { name: 'Прокрутить руку вправо' });
-    const scrollable = await a.locator('.own-hand').evaluate(el => el.scrollWidth > el.clientWidth + 4);
-    if (scrollable) {
-      await expect(rightBtn).toBeVisible();
-      const before = await a.locator('.own-hand').evaluate(el => el.scrollLeft);
-      await rightBtn.click();
-      await expect.poll(() => a.locator('.own-hand').evaluate(el => el.scrollLeft)).toBeGreaterThan(before);
-      await expect(a.getByRole('button', { name: 'Прокрутить руку влево' })).toBeVisible();
-      // first and last cards remain reachable
-      const last = a.locator('.own-hand [data-hand-card]').last();
-      await last.scrollIntoViewIfNeeded();
-      await expect(last).toBeVisible();
-    }
+    const fanFit = await a.evaluate(() => {
+      const measure = document.querySelector('.durak-hand-measure');
+      const cards = [...document.querySelectorAll<HTMLElement>('.durak-hand-fan [data-hand-card]')];
+      return {
+        scrollable: !!measure && measure.scrollWidth > measure.clientWidth + 4,
+        outside: cards.filter(el => { const r = el.getBoundingClientRect(); return r.left < -1 || r.right > innerWidth + 1; }).length,
+        count: cards.length,
+      };
+    });
+    expect(fanFit.scrollable, JSON.stringify(fanFit)).toBe(false);
+    expect(fanFit.outside, JSON.stringify(fanFit)).toBe(0);
     await a.screenshot({ path: 'tests/.artifacts/durak-mobile-320-hand.png' });
     await a.setViewportSize({ width: 390, height: 844 });
 
@@ -209,7 +211,7 @@ test('durak mobile: hand sorting, edge scroll, selection kept, viewport fit, lar
     const bigCount = Math.max(...counts);
     await bigPage.setViewportSize({ width: 390, height: 844 });
     await bigPage.waitForTimeout(300);
-    await expect(bigPage.locator('.own-hand .playing-card')).toHaveCount(bigCount);
+    await expect(bigPage.locator('.durak-hand-fan .playing-card')).toHaveCount(bigCount);
     await bigPage.screenshot({ path: 'tests/.artifacts/durak-mobile-big-hand.png', fullPage: true });
     await bigPage.setViewportSize({ width: 320, height: 568 });
     await bigPage.waitForTimeout(200);
