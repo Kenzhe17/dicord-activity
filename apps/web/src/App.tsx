@@ -64,7 +64,7 @@ export function App() {
   const immersive = !!(room && (room.gameId === 'durak' || room.gameId === 'codenames') && (room.phase === 'playing' || durakLive || codeLive));
   const durakMode = immersive && room?.gameId === 'durak' ? ((room?.settings as { mode?: string } | undefined)?.mode === 'transfer' ? 'Переводной' : 'Подкидной') : '';
   const codeMode = immersive && room?.gameId === 'codenames' ? ((room?.settings as { traitor?: boolean; timed?: boolean; ruleSet?: string } | undefined)?.traitor ? 'Предатель' : (room?.settings as { timed?: boolean } | undefined)?.timed ? 'На время' : (room?.settings as { ruleSet?: string } | undefined)?.ruleSet === 'unlimited' ? 'Без лимита' : 'Классика') : '';
-  const gameTitle = room?.gameId === 'codenames' ? 'Кодовые имена' + (codeMode ? ' · ' + codeMode : '') : durakMode + ' дурак';
+  const gameTitle = room?.gameId === 'codenames' ? 'Слова' + (codeMode ? ' · ' + codeMode : '') : durakMode + ' дурак';
   const navigate = useCallback((value: string) => { location.hash = '/' + value; setRoute(value); }, []);
   useEffect(() => { const changed = () => setRoute(currentRoute()); window.addEventListener('hashchange', changed); return () => window.removeEventListener('hashchange', changed); }, []);
   const run = useCallback(async (action: () => Promise<void>) => {

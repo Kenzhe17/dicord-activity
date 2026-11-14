@@ -90,9 +90,9 @@ export function CodenamesTable({ match, room, busy, run, resultActions }: { matc
   const choose = (team: Team | 'spectator', role?: 'spymaster' | 'operative') =>
     void act({ type: 'choose', team, ...(role ? { role } : {}) });
 
-  return <section className="codenames-game" aria-label="Кодовые имена">
+  return <section className="codenames-game" aria-label="Слова">
     <div className="codetop">
-      <div className="codetop-info"><strong>Кодовые имена</strong><span className="codetop-mode">{modeLabel}</span></div>
+      <div className="codetop-info"><strong>Слова</strong><span className="codetop-mode">{modeLabel}</span></div>
       <div className="codetop-scores">
         <span className={'score-chip red' + (inGame && current === 'red' ? ' active' : '')}><i/>Красные · {state.remaining.red}</span>
         <span className={'score-chip blue' + (inGame && current === 'blue' ? ' active' : '')}><i/>Синие · {state.remaining.blue}</span>
