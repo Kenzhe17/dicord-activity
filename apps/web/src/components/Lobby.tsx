@@ -8,6 +8,7 @@ import { Avatar } from './Avatar';
 import { BalanceNote } from './BalanceNote';
 import { DurakTable } from './DurakTable';
 import { UnoTable } from './uno/UnoTable';
+import { MonopolyTable } from './MonopolyTable';
 export interface DiscordInviteActions { channel: () => Promise<string> }
 export function Lobby({ games, run, busy, onLeft, discordInvite }: { games: GameInfo[]; run: (action: () => Promise<void>) => Promise<void>; busy: boolean; onLeft: () => void; discordInvite?: DiscordInviteActions | undefined }) {
   const { session, room, match, setRoom, setMatch } = useArcade();
@@ -49,15 +50,17 @@ export function Lobby({ games, run, busy, onLeft, discordInvite }: { games: Game
   }
   async function startMatch() { setMatch(await post<MatchView>('/rooms/' + room!.id + '/start', { requestId: crypto.randomUUID() })); await refresh(); }
   function leaveRoom() { void run(async () => { await api('/rooms/' + room!.id + '/membership', { method: 'DELETE' }); setRoom(null); setMatch(null); onLeft(); }); }
-  const canStart = game?.status === 'ready' && room.members.length >= game.minPlayers && !room.members.some(m => !m.ready);
-  const playingGame = room.phase === 'playing' && (room.gameId === 'durak' || room.gameId === 'uno') ? room.gameId
-    : room.gameId === 'uno' && match?.gameId === 'uno' && match?.status !== 'active' ? 'uno' : null;
+  const canStart = game?.status === 'ready' && room.members.length >= game.minPlayers && !room.members.some(m => !m.ready)
+    && !(room.gameId === 'monopoly' && (room.settings as { mode?: string } | undefined)?.mode === 'teams' && room.members.length !== 4);
+  const playingGame = ['durak', 'monopoly'].includes(room.gameId) && (room.phase === 'playing' || ['durak', 'monopoly'].includes(match?.gameId ?? '') && match?.status !== 'active') ? room.gameId
+    : room.gameId === 'uno' && (room.phase === 'playing' || (match?.gameId === 'uno' && match?.status !== 'active')) ? 'uno' : null;
   return <section className={'room-screen' + (playingGame ? ' playing-' + playingGame : '')}>
     <button className="text-button" disabled={busy || room.phase === 'playing'} onClick={leaveRoom}><ArrowLeft size={16}/>Покинуть комнату</button>
     <p className="eyebrow">ЛОББИ · {game?.name} {room.visibility === 'private' ? '· ПО ПРИГЛАШЕНИЮ' : ''}</p><h1>{room.name}</h1>
     <p className="subtitle">Ваш стол сохранён. После отключения можно вернуться в ту же партию.</p>
     {match?.gameId === 'uno' && <UnoTable key={match.matchId} match={match} room={room} busy={busy} run={run} onForfeitExit={leaveRoom} resultActions={match.status !== 'active' ? { ready, isHost: host, canStart, onToggleReady: () => void run(toggleReady), onStart: () => void run(startMatch), onLeave: leaveRoom } : undefined}/>}
     {match?.gameId === 'durak' && <DurakTable key={match.matchId} match={match} room={room} busy={busy} run={run} onForfeitExit={leaveRoom} resultActions={match.status !== 'active' ? { ready, isHost: host, canStart, onToggleReady: () => void run(toggleReady), onStart: () => void run(startMatch), onLeave: leaveRoom } : undefined}/>}
+    {match?.gameId === 'monopoly' && <MonopolyTable key={match.matchId} match={match} room={room} busy={busy} run={run} onForfeitExit={leaveRoom} resultActions={match.status !== 'active' ? { ready, isHost: host, canStart, onToggleReady: () => void run(toggleReady), onStart: () => void run(startMatch), onLeave: leaveRoom } : undefined}/>}
     {match && sandbox && <Panel className="match-panel"><div className="panel-heading"><h2>{match.status === 'finished' ? 'Партия завершена' : 'Испытательный стол'}</h2><span>Версия {match.version}</span></div><div className="score-grid">{room.members.map(m => <div className={sandbox.turnId === m.player.id ? 'score active-score' : 'score'} key={m.player.id}><span>{m.player.name}</span><strong>{sandbox.scores[m.player.id] ?? 0}</strong><small>из {sandbox.target}</small></div>)}</div>{match.status === 'finished' ? <p className="result-text">{match.result?.winners.includes(session.player.id) ? 'Вы победили' : 'Победитель: ' + (room.members.find(m => m.player.id === sandbox.winner)?.player.name ?? 'участник')} · Результат сохранён</p> : <><p>{sandbox.turnId === session.player.id ? 'Ваш ход' : 'Ходит ' + (room.members.find(m => m.player.id === sandbox.turnId)?.player.name ?? 'участник')}</p><div className="button-row">{([1, 2] as const).map(steps => <Button key={steps} disabled={busy || sandbox.turnId !== session.player.id} onClick={() => void run(async () => {
       const payload = { protocol: 1, roomId: room.id, matchId: match.matchId, requestId: crypto.randomUUID(), expectedVersion: match.version, action: { type: 'advance', steps } };
       try { setMatch(await post<MatchView>('/matches/' + match.matchId + '/actions', payload)); }

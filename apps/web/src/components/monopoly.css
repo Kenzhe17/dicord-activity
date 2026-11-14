@@ -1,0 +1,140 @@
+/* r!z3 Arcade — Monopoly game table. Dark premium theme, 11×11 board. */
+
+.mono-game { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+.mono-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mono-topbar-info { display: flex; align-items: baseline; gap: 10px; }
+.mono-topbar-info strong { font-size: 15px; letter-spacing: 0.04em; }
+.mono-team-tag { font-size: 12px; color: var(--muted, #9aa4b2); }
+.mono-topbar-right { display: flex; align-items: center; gap: 8px; }
+.mono-clock { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.06); }
+.mono-clock.urgent { color: #f87171; }
+.mono-dice { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; padding: 4px 10px; border-radius: 999px; background: rgba(96,165,250,0.12); color: #93c5fd; }
+.mono-zoom { display: inline-flex; gap: 2px; }
+.mono-zoom button { width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05); color: inherit; cursor: pointer; font-size: 15px; }
+.mono-zoom button:hover { background: rgba(255,255,255,0.12); }
+.mono-log-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: transparent; color: inherit; cursor: pointer; }
+.mono-log-toggle:hover { background: rgba(255,255,255,0.07); }
+
+.mono-status { display: flex; align-items: baseline; gap: 10px; padding: 8px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); }
+.mono-status strong { font-size: 14px; }
+.mono-status small { color: #fbbf24; }
+
+.mono-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; align-items: start; }
+
+.mono-board-scroll { overflow: auto; border-radius: 18px; background: radial-gradient(120% 120% at 50% 0%, #1c2b22 0%, #101a14 60%, #0b120e 100%); border: 1px solid rgba(255,255,255,0.09); padding: 14px; max-height: 78vh; }
+.mono-board { display: grid; grid-template-columns: repeat(11, minmax(58px, 1fr)); grid-template-rows: repeat(11, minmax(58px, 1fr)); gap: 3px; width: 100%; max-width: 780px; margin: 0 auto; aspect-ratio: 1; transform-origin: top left; }
+
+.mono-cell { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 5px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); border-top-width: 4px; background: #17211b; color: #e8ecef; cursor: pointer; font-size: 10px; line-height: 1.15; text-align: left; overflow: hidden; min-width: 0; }
+.mono-cell:hover { background: #1d2a22; }
+.mono-cell.owned { background: #1a2430; }
+.mono-cell.mortgaged { opacity: 0.75; }
+.mono-cell.purchase-target { outline: 2px solid #34d399; outline-offset: -2px; animation: mono-pulse 1.2s ease-in-out infinite; }
+.mono-cell.auction-target { outline: 2px solid #fbbf24; outline-offset: -2px; animation: mono-pulse 1s ease-in-out infinite; }
+.mono-cell.current-pos { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35); }
+.mono-cell.jail-cell { background: #2a1f16; }
+.mono-go, .mono-go { border-top-color: #34d399 !important; }
+
+@keyframes mono-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,0.0);} 50% { box-shadow: 0 0 8px 2px rgba(52,211,153,0.35);} }
+.mono-cell-auction-target, .mono-cell.auction-target { animation-name: mono-pulse-gold; }
+@keyframes mono-pulse-gold { 0%,100% { box-shadow: 0 0 0 0 rgba(251,191,36,0);} 50% { box-shadow: 0 0 10px 2px rgba(251,191,36,0.4);} }
+
+.mono-cell-name { font-weight: 600; font-size: 9.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: webkit-box; overflow: hidden; }
+.mono-cell-price { font-size: 9px; color: #9fb3a5; }
+.mono-cell-tax { font-size: 10px; color: #f87171; font-weight: 700; }
+.mono-cell-bonus { font-size: 10px; color: #34d399; font-weight: 700; }
+.mono-deck-tag { font-size: 8px; color: #7d8a94; text-transform: uppercase; letter-spacing: 0.05em; }
+.mono-owner-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; opacity: 0.9; }
+.mono-owner-bar em { position: absolute; right: 2px; top: -9px; font-style: normal; font-size: 7px; color: #cbd5e1; }
+.mono-levels { display: flex; gap: 1px; margin-top: 2px; }
+.mono-levels i { width: 5px; height: 5px; border-radius: 1px; background: #fbbf24; display: block; }
+.mono-mortgage-mark { display: inline-flex; align-items: center; gap: 2px; font-size: 8px; color: #fbbf24; font-weight: 700; }
+.mono-tokens { position: absolute; bottom: 4px; right: 4px; display: flex; }
+.mono-token { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #0b120e; display: block; margin-left: -4px; font-style: normal; font-size: 7px; color: #0b120e; text-align: center; line-height: 9px; }
+
+.mono-center { display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.mono-center-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 26px; border-radius: 16px; background: rgba(255,255,255,0.04); border: 1px dashed rgba(255,255,255,0.15); }
+.mono-center-card strong { font-size: 22px; letter-spacing: 0.2em; color: #e8ecef; }
+.mono-center-card span { font-size: 11px; color: #9fb3a5; letter-spacing: 0.3em; text-transform: uppercase; }
+.mono-center-card small { font-size: 10px; color: #6b7684; }
+
+/* Side panel */
+.mono-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mono-players { display: flex; flex-direction: column; gap: 6px; }
+.mono-player { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,0.05); border-left: 3px solid transparent; }
+.mono-player.active { background: rgba(255,255,255,0.09); box-shadow: 0 0 0 1px rgba(255,255,255,0.12); }
+.mono-player.out { opacity: 0.5; }
+.mono-player.mine { background: rgba(96,165,250,0.10); }
+.mono-player-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mono-player-info strong { font-size: 13px; }
+.mono-player-info span { font-size: 11px; color: var(--muted, #9aa4b2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.mono-auction-panel, .mono-trades, .mono-owned { padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); }
+.mono-auction-panel h3, .mono-trades h3, .mono-owned h3 { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-bottom: 6px; }
+.mono-auction-panel p { font-size: 13px; margin-bottom: 8px; }
+.mono-bid-row { display: flex; gap: 6px; }
+.mono-bid-row input { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.25); color: inherit; font-size: 14px; }
+.mono-trade { padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px; }
+.mono-trade p { margin-bottom: 6px; }
+.mono-trade.outgoing { opacity: 0.85; }
+.mono-owned-item { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 6px 8px; margin-bottom: 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); border-left-width: 3px; background: rgba(255,255,255,0.04); color: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+.mono-owned-item:hover { background: rgba(255,255,255,0.09); }
+.mono-owned-item small { color: var(--muted, #9aa4b2); }
+.mono-owned-item.mortgaged { opacity: 0.6; }
+
+.mono-log { position: fixed; right: 16px; bottom: 16px; width: min(340px, calc(100vw - 32px)); max-height: 40vh; overflow: auto; padding: 12px 14px; border-radius: 14px; background: rgba(10,14,12,0.92); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(8px); z-index: 60; }
+.mono-log p { font-size: 12px; margin: 4px 0; color: #cbd5e1; }
+.mono-log strong { color: #93c5fd; }
+
+.mono-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-radius: 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); position: sticky; bottom: 8px; z-index: 20; }
+.mono-actions .mono-primary { background: linear-gradient(135deg, #34d399, #10b981); color: #06281c; font-weight: 700; }
+.mono-debt-note { font-size: 13px; color: #fbbf24; }
+.mono-waiting { font-size: 13px; color: var(--muted, #9aa4b2); }
+
+/* Modals */
+.mono-modal-back { position: fixed; inset: 0; background: rgba(4,8,6,0.7); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 80; backdrop-filter: blur(3px); }
+.mono-modal { position: relative; width: min(480px, 100%); max-height: 85vh; overflow: auto; padding: 20px; border-radius: 18px; background: #141c17; border: 1px solid rgba(255,255,255,0.12); color: #e8ecef; }
+.mono-modal-close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: transparent; color: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.mono-modal-head { border-top-width: 6px; border-top-style: solid; padding-top: 10px; margin-bottom: 10px; }
+.mono-modal-head h2 { font-size: 20px; margin: 0; }
+.mono-modal-kind { font-size: 11px; color: var(--muted, #9aa4b2); text-transform: uppercase; letter-spacing: 0.08em; }
+.mono-modal-price, .mono-modal-owner { font-size: 13px; margin: 6px 0; }
+.mono-monopoly-tag { font-style: normal; margin-left: 8px; font-size: 11px; color: #34d399; border: 1px solid #34d39955; padding: 1px 7px; border-radius: 999px; }
+.mono-rent-table { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0; }
+.mono-rent-table span { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: rgba(255,255,255,0.07); }
+.mono-rent-table span.cur { background: rgba(52,211,153,0.18); color: #6ee7b7; }
+.mono-mortgaged-note { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #fbbf24; }
+.mono-manage { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); }
+.mono-modal .muted { color: var(--muted, #9aa4b2); font-size: 13px; }
+
+.mono-trade-modal h2 { display: flex; align-items: center; gap: 8px; font-size: 18px; margin: 0 0 14px; }
+.mono-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-bottom: 14px; }
+.mono-field select, .mono-field input { padding: 9px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.25); color: inherit; font-size: 14px; }
+.mono-trade-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.mono-trade-col h3 { font-size: 13px; margin-bottom: 8px; }
+.mono-trade-col label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; margin-bottom: 8px; }
+.mono-trade-col input { padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.25); color: inherit; }
+.mono-trade-props { display: flex; flex-wrap: wrap; gap: 5px; max-height: 180px; overflow: auto; }
+.mono-trade-props button { font-size: 11px; padding: 5px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); color: inherit; cursor: pointer; }
+.mono-trade-props button.sel { background: rgba(52,211,153,0.2); border-color: #34d399; color: #6ee7b7; }
+
+.mono-result { position: fixed; inset: 0; background: rgba(4,8,6,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; z-index: 90; padding: 20px; overflow: auto; }
+.mono-result h2 { font-size: 26px; margin: 0; }
+.mono-result p { color: var(--muted, #9aa4b2); margin: 0; }
+.mono-result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; width: min(720px, 100%); }
+.mono-result-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px; border-radius: 14px; background: rgba(255,255,255,0.06); border-left: 3px solid; }
+.mono-result-card.winner { background: rgba(52,211,153,0.12); }
+.mono-result-card strong { font-size: 14px; }
+.mono-result-card span { font-size: 12px; color: var(--muted, #9aa4b2); }
+
+/* Mobile adaptations */
+@media (max-width: 900px) {
+  .mono-layout { grid-template-columns: 1fr; }
+  .mono-board-scroll { max-height: none; padding: 8px; }
+  .mono-board { grid-template-columns: repeat(11, minmax(0, 1fr)); grid-template-rows: repeat(11, minmax(0, 1fr)); }
+  .mono-cell-name { font-size: 8px; }
+  .mono-side { order: 2; }
+  .mono-actions { bottom: 0; border-radius: 14px 14px 0 0; }
+  .mono-trade-cols { grid-template-columns: 1fr; }
+  .mono-log { right: 8px; left: 8px; bottom: 70px; width: auto; }
+}

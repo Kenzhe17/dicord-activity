@@ -10,6 +10,7 @@
   "dependencies": {
     "@rize/discord": "workspace:*",
     "@rize/durak": "workspace:*",
+    "@rize/monopoly": "workspace:*",
     "@rize/shared": "workspace:*",
     "@rize/ui": "workspace:*",
     "@rize/uno": "workspace:*",
