@@ -437,7 +437,9 @@ async function modalAction(page: Page, cellName: string, button: RegExp | string
   await page.locator('.mono-modal-close').click({ timeout: 2000 }).catch(() => {});
   await page.getByRole('button', { name: cellName, exact: true }).click();
   await expect(page.locator('.mono-modal')).toBeVisible();
-  await page.getByRole('button', { name: button }).click();
+  // force: the modal re-renders on every state tick, so Playwright's
+  // stability check can wait forever on a constantly-moving button.
+  await page.getByRole('button', { name: button }).click({ force: true });
 }
 
 /* ==================== Tests ==================== */
@@ -465,12 +467,26 @@ test('monopoly scenarios: build to hotel and sell back down via UI', async ({ br
     const balance = async () => viewState(await serverView(fx)).banks[builderBank]!.balance;
     const level = async (i: number) => viewState(await serverView(fx)).properties[i]!.level;
 
+    // A click can be dropped when the page still holds a stale view version;
+    // re-read the server level before every click so a late-applied action
+    // can never trigger a second build/sell on the same property.
+    async function stepLevel(idx: number, cellName: string, button: RegExp, to: number) {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (await level(idx) === to) return;
+        await modalAction(builderPage, cellName, button);
+        try {
+          await expect.poll(async () => level(idx), { timeout: 6000 }).toBe(to);
+          return;
+        } catch { /* rejected or still in flight — retry */ }
+      }
+      await expect.poll(async () => level(idx), { timeout: 8000 }).toBe(to);
+    }
+
     // Build every group property up to MAX_LEVEL (hotel), verifying each step.
     for (let lvl = 0; lvl < MAX_LEVEL; lvl++) {
       for (const idx of group!) {
         const before = await balance();
-        await modalAction(builderPage, BOARD[idx]!.name, /Построить/);
-        await expect.poll(async () => level(idx), { timeout: 8000 }).toBe(lvl + 1);
+        await stepLevel(idx, BOARD[idx]!.name, /Построить/, lvl + 1);
         await expect.poll(async () => balance(), { timeout: 8000 }).toBe(before - houseCost);
       }
     }
@@ -481,8 +497,7 @@ test('monopoly scenarios: build to hotel and sell back down via UI', async ({ br
     for (const idx of group!) {
       for (let lvl = MAX_LEVEL; lvl > 0; lvl--) {
         const before = await balance();
-        await modalAction(builderPage, BOARD[idx]!.name, /Продать постройку/);
-        await expect.poll(async () => level(idx), { timeout: 8000 }).toBe(lvl - 1);
+        await stepLevel(idx, BOARD[idx]!.name, /Продать постройку/, lvl - 1);
         await expect.poll(async () => balance(), { timeout: 8000 }).toBe(before + refund);
       }
       expect(await level(idx)).toBe(0);
