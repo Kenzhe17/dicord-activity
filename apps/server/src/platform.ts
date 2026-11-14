@@ -18,10 +18,6 @@ export class PlatformService {
   private readonly startedAt: number;
   private readonly recoveryId = randomUUID();
   private lastStakeReconcile = 0;
-  /** Round-robin cursor so tickTimers bounds work per pass: restoring every
-   * active match each second does not scale once stale matches accumulate. */
-  private tickCursor = 0;
-  private static readonly TICK_BATCH = 150;
   constructor(readonly db: PrismaClient, readonly games: GameRegistry, private readonly now = Date.now, private readonly economy: StakesBridge | null = null, private readonly stakesEnabled = false) { this.startedAt = now(); }
   private async room(tx: Tx, id: string) {
     const row = await tx.roomSnapshot.findUnique({ where: { id } });
@@ -356,20 +352,10 @@ export class PlatformService {
   }
   async tickTimers(): Promise<{ failures: { matchId: string; errorName: string }[]; finished: { matchId: string; roomId: string }[] }> {
     const timedGames = this.games.list().filter(g => g.status === 'ready' && this.games.getModule(g.id).getSystemAction).map(g => g.id);
-    const matches = await this.db.matchSnapshot.findMany({ where: { status: 'active', gameId: { in: timedGames } }, orderBy: { createdAt: 'asc' }, select: { id: true } });
-    // Bound per-pass work: with more active matches than the batch size, each
-    // match is visited at most once per ceil(N/BATCH) seconds — timeout
-    // latency grows slightly, but one wedged/stale match can no longer starve
-    // every other table's timers.
-    let batch = matches;
-    if (matches.length > PlatformService.TICK_BATCH) {
-      const start = this.tickCursor % matches.length;
-      batch = [...matches.slice(start), ...matches.slice(0, start)].slice(0, PlatformService.TICK_BATCH);
-      this.tickCursor = (start + PlatformService.TICK_BATCH) % matches.length;
-    }
+    const matches = await this.db.matchSnapshot.findMany({ where: { status: 'active', gameId: { in: timedGames } }, select: { id: true } });
     const failures: { matchId: string; errorName: string }[] = [];
     const finished: { matchId: string; roomId: string }[] = [];
-    for (const match of batch) {
+    for (const match of matches) {
       try { const done = await this.tickMatch(match.id); if (done) { await this.settleMatch(done.matchId); finished.push(done); } }
       catch (error) {
         // One damaged checkpoint or clock anomaly must not stop every other table.
