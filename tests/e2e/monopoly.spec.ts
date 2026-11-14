@@ -125,7 +125,7 @@ test('monopoly: board, turns, purchases, reconnect and real backend restart', as
     expect(restarted, 'backend restart checkpoint was not exercised').toBe(true);
     expect(view.status).toBe('active');
     const finalState = view.state as MonopolyView;
-    expect(finalState.dice).not.toBeNull();
+    expect(finalState.players.some(p => p.lastDice !== null)).toBe(true);
     // At least one purchase or auction resolution must have happened.
     expect(finalState.properties.some(p => p.owner !== null) || finalState.log.some(l => l.text.includes('аукцион'))).toBe(true);
   } finally {
