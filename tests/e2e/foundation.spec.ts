@@ -40,10 +40,11 @@ test('two players create, join, restore their session and synchronize a lobby', 
     await expect(a.getByRole('heading', { name: roomName, level: 1 })).toHaveCount(0);
   } finally { await first.close(); await second.close(); }
 });
-test('library and account screens are responsive and settings survive reload', async ({ page }) => {
+test('library and account screens are responsive and settings survive reload', async ({ page, request }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Библиотека игр' })).toBeVisible();
-  await expect(page.getByText('СКОРО', { exact: true })).toHaveCount(2);
+  const games = (await (await request.get('/api/games')).json()) as { status: string }[];
+  await expect(page.getByText('СКОРО', { exact: true })).toHaveCount(games.filter(g => g.status === 'planned').length);
   await expect(page.getByRole('button', { name: /Мафия/ })).toHaveCSS('opacity', '1');
   await page.screenshot({ path: 'tests/.artifacts/library-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Войти локально' }).click();
