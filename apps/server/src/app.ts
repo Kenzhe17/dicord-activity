@@ -126,7 +126,8 @@ export async function buildApp(config: Config, options: { oauth?: AuthProvider; 
     }
   }
   // One-shot delivery of a just-finished match to current room subscribers.
-  // Waiting rooms deliberately hide matchId, so results cannot be re-fetched by joiners.
+  // Waiting rooms expose matchId only to match participants; for everyone else
+  // the finished result cannot be re-fetched and is never emitted here.
   async function emitFinishedMatch(roomId: string, matchId: string): Promise<void> {
     for (const [id, subscription] of subscriptions) {
       if (subscription.roomId !== roomId) continue;

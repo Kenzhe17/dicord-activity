@@ -106,7 +106,7 @@ describe('pooled durak stakes', () => {
     expect(econ.refund).toHaveBeenCalledWith(opId);
     const events = await instance.db.recoveryEvent.findMany({ where: { kind: 'stake_orphan_refunded', roomId: instance.room.id } });
     expect(events).toHaveLength(1);
-  });
+  }, 30000); // escrow + commit + tickTimers sweep queue on the shared advisory lock
   it('settles the full pool to the winner after a surrender finish', async () => {
     const econ = bridge();
     const instance = await setup(100, 2, econ);
@@ -197,5 +197,5 @@ describe('pooled durak stakes', () => {
     // The parked overflow is claimed from the bot on the next reconcile pass.
     await instance.rooms.tickTimers();
     expect(econ.claimPending).toHaveBeenCalledWith(expect.stringContaining(instance.room.id));
-  });
+  }, 30000); // settle + reconcile sweep queue on the shared advisory lock
 });

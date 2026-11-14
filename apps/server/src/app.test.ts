@@ -33,7 +33,7 @@ describe('HTTP foundation', () => {
   it('boots with PostgreSQL, serves registry and protects room endpoints', async () => {
     const { app } = await create();
     expect((await app.inject('/health/ready')).json()).toMatchObject({ databaseConnected: true, persistence: 'postgresql' });
-    expect((await app.inject('/api/games')).json()).toHaveLength(4);
+    expect((await app.inject('/api/games')).json()).toHaveLength(5);
     expect((await app.inject('/api/rooms')).statusCode).toBe(401);
     expect((await app.inject({ url: '/api/games', headers: { origin: 'https://evil.example' } })).statusCode).toBe(403);
   });

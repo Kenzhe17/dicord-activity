@@ -1,0 +1,194 @@
+/* Durak FX layer — decorative overlays only.
+ * .durak-fx-layer must live inside a position:relative ancestor (the felt
+ * element carries data-felt). All effects are pointer-events:none.
+ * Animations respect prefers-reduced-motion AND a .reduced-motion
+ * ancestor class (the component adds it when preferences.reducedMotion). */
+
+.durak-fx-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.durak-fx-host {
+  position: absolute;
+  inset: 0;
+}
+
+.durak-fx {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* shared card-chip look (deal fan / take slide) */
+.durak-fx-chip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 48px;
+  margin: -24px 0 0 -17px;
+  border-radius: 5px;
+  border: 1px solid rgba(245, 214, 123, 0.85);
+  background:
+    linear-gradient(135deg, rgba(245, 214, 123, 0.28), rgba(212, 164, 55, 0.12)),
+    repeating-linear-gradient(45deg, rgba(245, 214, 123, 0.12) 0 3px, transparent 3px 7px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  animation: durakFxChip 0.7s ease-out both;
+}
+
+/* ---- deal: subtle fan shimmer ---- */
+.durak-fx-deal .durak-fx-chip { animation-name: durakFxFan; animation-duration: 0.9s; }
+@keyframes durakFxFan {
+  0%   { opacity: 0; transform: translate(var(--tx, 0px), 26px) rotate(var(--rot, 0deg)) scale(0.8); }
+  35%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--tx, 0px), -18px) rotate(var(--rot, 0deg)) scale(1); }
+}
+/* chipStyle supplies --tx/--rot (fan arc offset) via inline style. */
+
+/* ---- attack / throw / transfer: card-flip shimmer at table center ---- */
+.durak-fx-flip {
+  width: 58px;
+  height: 82px;
+  margin: -41px 0 0 -29px;
+  left: 50%;
+  top: 50%;
+  border-radius: 7px;
+  border: 2px solid rgba(245, 214, 123, 0.9);
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.35), transparent 45%),
+    linear-gradient(160deg, rgba(60, 90, 160, 0.55), rgba(24, 36, 70, 0.85));
+  box-shadow: 0 0 26px rgba(245, 214, 123, 0.45), 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: durakFxFlip 0.62s cubic-bezier(0.3, 0.7, 0.3, 1) both;
+}
+@keyframes durakFxFlip {
+  0%   { opacity: 0; transform: perspective(400px) rotateY(85deg) scale(0.7); }
+  35%  { opacity: 1; }
+  60%  { transform: perspective(400px) rotateY(-12deg) scale(1.05); }
+  100% { opacity: 0; transform: perspective(400px) rotateY(-70deg) scale(0.85) translateY(-14px); }
+}
+
+/* ---- defend: shield pulse ---- */
+.durak-fx-shield {
+  width: 74px;
+  height: 74px;
+  margin: -37px 0 0 -37px;
+  left: 50%;
+  top: 50%;
+  border-radius: 18px;
+  border: 3px solid rgba(125, 211, 252, 0.9);
+  box-shadow: 0 0 30px rgba(125, 211, 252, 0.55), inset 0 0 18px rgba(125, 211, 252, 0.3);
+  animation: durakFxShield 0.65s ease-out both;
+}
+.durak-fx-shield::after {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.5);
+}
+@keyframes durakFxShield {
+  0%   { opacity: 0; transform: scale(0.4); }
+  30%  { opacity: 1; transform: scale(1.15); }
+  55%  { transform: scale(0.95); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+
+/* ---- take / pickup: cards slide down and fade ---- */
+.durak-fx-slide .durak-fx-chip { animation-name: durakFxSlide; animation-duration: 0.7s; }
+@keyframes durakFxSlide {
+  0%   { opacity: 0; transform: translate(var(--tx, 0px), -46px) rotate(var(--rot, 0deg)) scale(0.9); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--tx, 0px), 34px) rotate(var(--rot, 0deg)) scale(0.85); }
+}
+
+/* ---- discard: horizontal sweep fade ---- */
+.durak-fx-sweep {
+  left: 18%;
+  right: 18%;
+  top: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, rgba(245, 214, 123, 0.9), transparent);
+  box-shadow: 0 0 18px rgba(245, 214, 123, 0.6);
+  animation: durakFxSweep 0.72s ease-in-out both;
+}
+@keyframes durakFxSweep {
+  0%   { opacity: 0; transform: translateX(-30%) scaleX(0.4); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(30%) scaleX(0.4); }
+}
+
+/* ---- pass / pause / resume: soft ripple ---- */
+.durak-fx-ripple {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  border: 2px solid rgba(226, 232, 240, 0.65);
+  animation: durakFxRipple 0.55s ease-out both;
+}
+@keyframes durakFxRipple {
+  0%   { opacity: 0.8; transform: scale(0.5); }
+  100% { opacity: 0; transform: scale(7); }
+}
+
+/* ---- surrender: quick dim pulse ---- */
+.durak-fx-surrender {
+  background: radial-gradient(circle, rgba(15, 23, 42, 0.55), transparent 65%);
+  animation: durakFxSurrender 0.8s ease-out both;
+}
+@keyframes durakFxSurrender {
+  0%   { opacity: 0; }
+  25%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---- finished: confetti-lite (gold/cream particles) ---- */
+.durak-fx-confetti {
+  inset: 0;
+}
+.durak-fx-particle {
+  position: absolute;
+  top: -4%;
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  opacity: 0;
+  animation-name: durakFxConfetti;
+  animation-timing-function: cubic-bezier(0.25, 0.6, 0.4, 1);
+  animation-fill-mode: both;
+  box-shadow: 0 0 6px rgba(245, 214, 123, 0.35);
+}
+@keyframes durakFxConfetti {
+  0%   { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg); }
+  8%   { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(var(--drift, 0px), 105vh, 0) rotate(340deg); }
+}
+
+/* ---- reduced-motion fade (finished only) ---- */
+.durak-fx-fade {
+  background: radial-gradient(circle, rgba(245, 214, 123, 0.35), transparent 60%);
+  animation: durakFxFade 0.15s ease-out both;
+}
+@keyframes durakFxFade {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Respect prefers-reduced-motion AND a .reduced-motion ancestor class.
+ * Everything is killed except the short fade. */
+@media (prefers-reduced-motion: reduce) {
+  .durak-fx-layer .durak-fx { animation: none !important; }
+  .durak-fx-layer .durak-fx-fade { animation: durakFxFade 0.15s ease-out both !important; }
+}
+.reduced-motion .durak-fx-layer .durak-fx { animation: none !important; }
+.reduced-motion .durak-fx-layer .durak-fx-fade { animation: durakFxFade 0.15s ease-out both !important; }
