@@ -50,9 +50,11 @@
 - Smoke-тест собранного артефакта уже включает UNO: `node tooling/smoke-built.mjs` поднимает `apps/server/dist/index.js` в production-режиме и ассертит `games.find(g => g.id === 'uno')?.status === 'ready'`.
 - Переменные окружения задокументированы в `.env.example` (актуализирован: имена `ARCADE_*`, плейсхолдеры, без значений). `apps/web` env-переменных не читает — `clientId` приходит из `/api/config`, `vite.config.ts` использует `envDir: './config'` (пуст), поэтому `apps/web/.env.production` в сборку не попадает.
 
-## 3. Staging-деплой и rollback (план, не выполнялся)
+## 3. Staging-деплой и rollback
 
-Staging = отдельный Railway environment/проект с **отдельным** PostgreSQL (`ArcadePostgres` staging), отдельным Discord-приложением или его копией и `ARCADE_AUTH_MODE=discord`. Никогда не указывайте staging на production-базу.
+**Выполнено (2026-11-14):** коммит `078c1f4` развёрнут на Railway staging как отдельный сервис `dicord-activity-uno` → https://dicord-activity-uno-staging.up.railway.app (env `staging` проекта feisty-trust, отдельный staging `Postgres`, миграции применены `arcade-migrate-staging`, `ARCADE_AUTH_MODE=mock` для автоматизированной проверки). Подтверждено: `/api/games` → uno=ready; полный 2-player UNO-матч через API+WebSocket — finished за 51 действие, reconnect посреди матча, идемпотентность requestId, ровно одна запись результата в истории; повторы — 112 действий/42.7s. Скрипт прогона: `artifacts/staging-qa/staging-qa.mjs`.
+
+Ограничения staging: mock auth (dev-вход); `ARCADE_ORIGIN` указывает на railway-домен — для реального Discord Activity его нужно сменить на `https://<APP_ID>.discordsays.com` и включить `ARCADE_AUTH_MODE=discord` + Discord-секреты; URL Mapping Discord-приложения указывает на production — live Activity-проверка на staging требует отдельного Discord-приложения или временного переключения mapping (решение за владельцем).
 
 Порядок:
 
@@ -91,7 +93,7 @@ Rollback:
 - [ ] Запуск Activity из Discord (команда `r!z3 Arcade` / кнопка в канале новостей / voice-канал) → consent identify → вход; UNO видна в библиотеке с тегом «ИГРАТЬ» (не «СКОРО»). Повторный запуск в той же сессии Discord не должен запрашивать consent повторно (`prompt: 'none'`).
 - [ ] Внешний браузер по URL Activity: `frame_id` отсутствует → экран «Откройте Arcade как Activity внутри Discord», входа нет (проверка `location.search` в `App.tsx`).
 - [ ] Guild-lockdown: Activity, запущенная на сервере вне `ARCADE_ALLOWED_GUILD_ID` (или в DM/групповом DM), показывает экран ограничения (`GuildRestrictedScreen`) и не доходит до OAuth; сервер при этом логирует `guild_verify_rejected` с reason-кодом.
-- [ ] Создание комнаты UNO из Activity: режим «Очки до цели»/«Быстрая», цель 200–10000, 2–10 игроков, приватная/публичная комната (настройки валидируются `unoSettingsSchema`: `mode` quick|points, `target` 100–10000, `maxPlayers` 2–10).
+- [ ] Создание комнаты UNO из Activity: режим «Очки до цели»/«Быстрая», цель 100–10000, 2–10 игроков, приватная/публичная комната (настройки валидируются `unoSettingsSchema`: `mode` quick|points, `target` 100–10000, `maxPlayers` 2–10).
 - [ ] Приглашение друзей: второй аккаунт (другой Discord-пользователь, тот же разрешённый guild) вступает по коду/ссылке; посторонний сервер войти не может.
 - [ ] Полная партия с 2+ реальными клиентами (один desktop, один mobile): раздача, ходы, цвет, Draw Two/Reverse/Skip/Wild/Wild Draw Four, вызов/оспаривание WD4, объявление UNO, штраф +2, конец раунда, подсчёт очков до цели.
 - [ ] Мобильный клиент Discord: раскладка стола, отсутствие горизонтального скролла (покрыто e2e viewport 390×844), тап по картам; та же комната открывается на desktop.
