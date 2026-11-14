@@ -44,17 +44,25 @@ export function classifyPresenceError(error: unknown): PresenceErrorKind {
   return 'unknown';
 }
 
-const ASSETS = {
-  main: 'arcade_main',
-  durakLobby: 'durak_lobby',
-  durakPlaying: 'durak_playing',
-  victory: 'arcade_victory',
-  uno: 'uno_main',
-  mafia: 'mafia_main',
-} as const;
+export type PresenceAssetStage = 'main' | 'lobby' | 'playing';
+
+/** Per-game Rich Presence art. Keys must match asset names in the Discord
+ * Developer Portal exactly (file name without .png). */
+const GAME_ASSETS: Record<string, Record<PresenceAssetStage, string>> = {
+  durak: { main: 'durak_main', lobby: 'durak_lobby', playing: 'durak_playing' },
+  uno: { main: 'uno_main', lobby: 'uno_lobby', playing: 'uno_playing' },
+  mafia: { main: 'mafia_main', lobby: 'mafia_lobby', playing: 'mafia_playing' },
+  codenames: { main: 'codenames_main', lobby: 'codenames_lobby', playing: 'codenames_playing' },
+  monopoly: { main: 'monopoly_main', lobby: 'monopoly_lobby', playing: 'monopoly_playing' },
+};
+const SHARED_ASSETS = { home: 'arcade_main', victory: 'arcade_victory', defeat: 'arcade_defeat' } as const;
+
 /** Art asset keys that must exist in the Discord Developer Portal. Missing
  * keys degrade to no image on Discord's side; they never break updates. */
-export const PRESENCE_ASSET_KEYS = Object.values(ASSETS);
+export const PRESENCE_ASSET_KEYS: readonly string[] = [
+  ...Object.values(SHARED_ASSETS),
+  ...Object.values(GAME_ASSETS).flatMap(assets => [assets.main, assets.lobby, assets.playing]),
+];
 
 function toSdkPayload(input: PresenceActivity | null): Record<string, unknown> | null {
   if (!input) return null;
@@ -228,11 +236,8 @@ function durakMode(room: RoomView): string | null {
   return null;
 }
 
-function gameAsset(gameId: string, kind: 'lobby' | 'playing' | 'main'): string {
-  if (gameId === 'durak') return kind === 'lobby' ? ASSETS.durakLobby : kind === 'playing' ? ASSETS.durakPlaying : ASSETS.main;
-  if (gameId === 'uno') return ASSETS.uno;
-  if (gameId === 'mafia') return ASSETS.mafia;
-  return ASSETS.main;
+function gameAsset(gameId: string, stage: PresenceAssetStage): string {
+  return GAME_ASSETS[gameId]?.[stage] ?? SHARED_ASSETS.home;
 }
 
 export function describePresence(context: PresenceContext): PresenceActivity | null {
@@ -243,18 +248,26 @@ export function describePresence(context: PresenceContext): PresenceActivity | n
     const mode = room.gameId === 'durak' ? durakMode(room) : null;
     const details = name + (mode ? ' · ' + mode : '');
     const party = { id: 'arcade-room-' + room.id, size: [Math.min(room.members.length, room.maxPlayers), room.maxPlayers] as [number, number] };
-    if (room.phase === 'playing' && match) {
-      if (match.status === 'finished') {
-        const won = !!match.result && !match.result.draw && match.result.winners.includes(playerId);
-        return {
-          details: name,
-          state: won ? 'Победа в партии' : 'Партия завершена',
-          largeImage: won ? ASSETS.victory : gameAsset(room.gameId, 'playing'),
-          largeText: won ? 'Победа в партии!' : 'Партия завершена',
-          endTimestamp: match.finishedAt ? Math.floor(Date.parse(match.finishedAt) / 1000) : undefined,
-        };
+    // The server returns the room to 'waiting' when a match ends, but the
+    // finished MatchView stays on screen — the result must keep showing
+    // until a new match replaces it. Only trust matches of this room.
+    const current = match && match.roomId === room.id ? match : null;
+    if (current && current.status !== 'active') {
+      const result = current.result;
+      const endTimestamp = current.finishedAt ? Math.floor(Date.parse(current.finishedAt) / 1000) : undefined;
+      if (result?.draw) {
+        return { details, state: 'Ничья', largeImage: gameAsset(room.gameId, 'main'), largeText: details + ' — ничья', party, endTimestamp };
       }
-      const startedAt = match.createdAt ? Math.floor(Date.parse(match.createdAt) / 1000) : undefined;
+      if (result && result.winners.includes(playerId)) {
+        return { details, state: 'Победа в партии', largeImage: SHARED_ASSETS.victory, largeText: details + ' — победа!', party, endTimestamp };
+      }
+      if (result && result.losers.includes(playerId)) {
+        return { details, state: 'Поражение в партии', largeImage: SHARED_ASSETS.defeat, largeText: details + ' — поражение', party, endTimestamp };
+      }
+      return { details, state: 'Партия завершена', largeImage: gameAsset(room.gameId, 'main'), largeText: details + ' — партия завершена', party, endTimestamp };
+    }
+    if (current && room.phase === 'playing') {
+      const startedAt = current.createdAt ? Math.floor(Date.parse(current.createdAt) / 1000) : undefined;
       return {
         details,
         state: 'Идёт партия',
@@ -274,13 +287,13 @@ export function describePresence(context: PresenceContext): PresenceActivity | n
   }
   if ((page === 'game' || page === 'create') && targetId) {
     const game = games.find(g => g.id === targetId);
-    if (!game) return { details: 'r!z3 Arcade', state: 'В игровом клубе', largeImage: ASSETS.main };
+    if (!game) return { details: 'r!z3 Arcade', state: 'В игровом клубе', largeImage: SHARED_ASSETS.home };
     if (game.status === 'planned') return { details: game.name, state: 'Скоро в Arcade', largeImage: gameAsset(game.id, 'main'), largeText: game.name + ' — скоро в Arcade' };
-    if (game.id === 'durak') return { details: 'Дурак', state: 'Выбирает режим', largeImage: ASSETS.main, largeText: 'Дурак — выбор режима' };
+    if (game.id === 'durak') return { details: game.name, state: 'Выбирает режим', largeImage: gameAsset(game.id, 'main'), largeText: game.name + ' — выбор режима' };
     return { details: game.name, state: 'Выбирает игру', largeImage: gameAsset(game.id, 'main') };
   }
   if (page === 'games') {
-    return { details: 'r!z3 Arcade', state: 'Выбирает игру', largeImage: ASSETS.main, largeText: 'r!z3 Arcade — библиотека игр' };
+    return { details: 'r!z3 Arcade', state: 'Выбирает игру', largeImage: SHARED_ASSETS.home, largeText: 'r!z3 Arcade — библиотека игр' };
   }
-  return { details: 'r!z3 Arcade', state: 'В игровом клубе', largeImage: ASSETS.main };
+  return { details: 'r!z3 Arcade', state: 'В игровом клубе', largeImage: SHARED_ASSETS.home };
 }
