@@ -1,0 +1,23 @@
+/* Own-hand fan: adaptive overlap, tap select, pointer drag. All classes
+   prefixed .durak-hand-* to avoid collisions with legacy .own-hand styles. */
+.durak-hand-root{display:flex;flex-direction:column;align-items:center}
+.durak-hand-sort{display:flex;justify-content:center;gap:4px;margin-bottom:4px}
+.durak-hand-sort button{border:1px solid #3a3644;background:#1d1b26;color:#a5a1b3;border-radius:999px;padding:3px 9px;font-size:10px;line-height:1.4;cursor:pointer;white-space:nowrap}
+.durak-hand-sort button:hover{color:#e6e2f2;border-color:#55496e}
+.durak-hand-sort button.active{background:#2c2340;border-color:#8a6fd0;color:#e2d4ff}
+.durak-hand-sort button:focus-visible{outline:2px solid #e6ce97;outline-offset:2px}
+
+.durak-hand-measure{width:100%;overflow:hidden;padding:26px 14px 4px}
+.durak-hand-fan{display:flex;justify-content:center;align-items:flex-end;transform-origin:50% 100%;user-select:none;-webkit-user-select:none;touch-action:none}
+.durak-hand-card{position:relative;flex:0 0 auto;border:0;padding:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:none;will-change:transform}
+.durak-hand-card .playing-card{display:block;width:100%;height:auto;filter:drop-shadow(0 3px 3px #0006);transition:filter .15s}
+.durak-hand-card.playable .playing-card{filter:drop-shadow(0 0 6px #c6b38b55) drop-shadow(0 3px 3px #0006)}
+.durak-hand-card.playable:hover .playing-card{filter:drop-shadow(0 0 10px #c6b38b88) drop-shadow(0 4px 5px #0007)}
+.durak-hand-card.selected .playing-card{filter:drop-shadow(0 0 10px #e6ce97aa) drop-shadow(0 6px 8px #0008)}
+.durak-hand-card:disabled{cursor:default}
+.durak-hand-card:disabled .playing-card{filter:grayscale(.55) brightness(.72) drop-shadow(0 2px 3px #0005)}
+.durak-hand-card:focus-visible{outline:2px solid #e6ce97;outline-offset:3px;border-radius:8px}
+.durak-hand-card.is-trump::after{content:'';position:absolute;top:4px;right:5px;width:7px;height:7px;background:var(--tc,#c6b38b);transform:rotate(45deg);border-radius:1px;opacity:.9;pointer-events:none}
+
+.durak-hand-drag{position:fixed;z-index:9999;pointer-events:none;transform:translate(-50%,-58%) rotate(-4deg) scale(1.05);filter:drop-shadow(0 14px 18px #000a)}
+.durak-hand-drag .playing-card{width:100%;height:auto}

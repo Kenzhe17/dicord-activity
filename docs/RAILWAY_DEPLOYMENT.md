@@ -23,10 +23,12 @@ Railway поддерживает Dockerfile и проверяет readiness на
 | ARCADE_ORIGIN | https://APP_ID.discordsays.com |
 | ARCADE_DISCORD_CLIENT_ID | Application ID Arcade |
 | ARCADE_DISCORD_CLIENT_SECRET | Новый секрет только в variables |
+| ARCADE_DATABASE_URL | Reference на отдельный Arcade Postgres DATABASE_URL |
 | ARCADE_DISCORD_BOT_TOKEN | Bot token приложения Arcade — обязателен при guild-lockdown: без него все Discord-логины отклоняются (`guild_verifier_missing`) |
 | ARCADE_ALLOWED_GUILD_ID | Snowflake'ы разрешённых Discord-серверов через запятую (дефолт — два r!z3-сервера; переопределять только при смене) |
-| ARCADE_DATABASE_URL | Reference на отдельный Arcade Postgres DATABASE_URL |
 | PORT | Назначается Railway |
+
+Необязательные: `ARCADE_SERVER_INVITE_URL`, `ARCADE_DISCORD_PUBLIC_KEY` + `ARCADE_ANNOUNCE_CHANNEL_ID` + `ARCADE_ADMIN_USER_IDS` (только /news-анонсы), `ARCADE_ECONOMY_*`/`ARCADE_STAKES_ENABLED` (ставки Дурака), `ARCADE_ROOM_IDLE_MS`/`ARCADE_HOST_GRACE_MS` (тайминги). Полный инвентарь — в `.env.example`. Frontend env-переменных не требует: `clientId` приходит из `GET /api/config`.
 
 Для сервиса ArcadePostgres reference имеет вид ${{ArcadePostgres.DATABASE_URL}}. Название должно совпадать с вашим сервисом. Runtime использует внутреннее соединение; ручным миграциям нужен согласованный доступ из среды CLI. Не выводите URL в логи.
 
@@ -71,7 +73,8 @@ Config-as-code файлы (`railway.toml`, `railway.migrate.toml`) удален�
 ## Проверка
 
 - /health/live и /health/ready: 200; /api/config: postgresql и discord.
-- /api/games: Дурак и UNO ready, Мафия planned; sandbox отсутствует, dev-вход запрещён.
+- Локальный smoke собранного сервера: `node tooling/smoke-built.mjs` (поднимает dist/index.js на test-БД, проверяет health, /api/config, все игры включая UNO `ready`, static/proxy, отсутствие sandbox).
+- /api/games: Дурак, UNO, Мафия, Кодовые имена и Монополия ready; sandbox отсутствует, dev-вход запрещён.
 - Root HTML, /.proxy/assets, /.proxy/api/games доступны.
 - Выполнен [Discord checklist](DISCORD_SETUP.md), включая два аккаунта и WebSocket.
 - Рестарт службы восстанавливает комнаты.

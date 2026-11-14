@@ -1,0 +1,15 @@
+{
+  "name": "@rize/codenames",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@rize/platform-core": "workspace:*",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@rize/multiplayer": "workspace:*"
+  }
+}

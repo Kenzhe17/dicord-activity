@@ -8,8 +8,11 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@rize/codenames": "workspace:*",
     "@rize/discord": "workspace:*",
     "@rize/durak": "workspace:*",
+    "@rize/mafia": "workspace:*",
+    "@rize/monopoly": "workspace:*",
     "@rize/shared": "workspace:*",
     "@rize/ui": "workspace:*",
     "@rize/uno": "workspace:*",
