@@ -17,6 +17,7 @@
     "@rize/discord": "workspace:*",
     "@rize/durak": "workspace:*",
     "@rize/mafia": "workspace:*",
+    "@rize/monopoly": "workspace:*",
     "@rize/multiplayer": "workspace:*",
     "@rize/platform-core": "workspace:*",
     "@rize/sandbox": "workspace:*",
