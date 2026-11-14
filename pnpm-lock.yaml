@@ -80,6 +80,9 @@ importers:
       '@rize/mafia':
         specifier: workspace:*
         version: link:../../games/mafia
+      '@rize/monopoly':
+        specifier: workspace:*
+        version: link:../../games/monopoly
       '@rize/multiplayer':
         specifier: workspace:*
         version: link:../../packages/multiplayer
@@ -123,6 +126,12 @@ importers:
       '@rize/durak':
         specifier: workspace:*
         version: link:../../games/durak
+      '@rize/mafia':
+        specifier: workspace:*
+        version: link:../../games/mafia
+      '@rize/monopoly':
+        specifier: workspace:*
+        version: link:../../games/monopoly
       '@rize/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -201,6 +210,26 @@ importers:
       zod:
         specifier: ^4.1.12
         version: 4.6.7
+    devDependencies:
+      '@rize/multiplayer':
+        specifier: workspace:*
+        version: link:../../packages/multiplayer
+
+  games/monopoly:
+    dependencies:
+      '@rize/platform-core':
+        specifier: workspace:*
+        version: link:../../packages/platform-core
+      '@rize/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.7
+    devDependencies:
+      '@rize/multiplayer':
+        specifier: workspace:*
+        version: link:../../packages/multiplayer
 
   games/sandbox:
     dependencies:
