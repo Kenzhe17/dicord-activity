@@ -8,7 +8,7 @@ async function create(extra: Record<string, string> = {}) {
   const instance = await buildApp(loadConfig({ ARCADE_ENV: 'test', ARCADE_AUTH_MODE: 'mock', ARCADE_ENABLE_TEST_GAME: 'true', ARCADE_DATABASE_URL: process.env['ARCADE_TEST_DATABASE_URL'], ...extra }), { logger: false });
   running.push(instance); return instance;
 }
-afterEach(async () => { for (const instance of running.splice(0)) await instance.app.close(); });
+afterEach(async () => { for (const instance of running.splice(0)) await instance.app.close(); }, 30000);
 async function players(instance: Awaited<ReturnType<typeof buildApp>>) {
   return Promise.all([1, 2, 3].map(i => instance.sessions.create({ id: 'dev:' + randomUUID().replaceAll('-', ''), name: 'Player ' + i, avatar: null })));
 }
@@ -80,12 +80,17 @@ describe('persistent platform', () => {
     expect(await second.rooms.history(a.player.id)).toHaveLength(1);
     const lobby = await second.rooms.view(room.id, a.player.id);
     expect(lobby.phase).toBe('waiting');
-    expect(lobby.matchId).toBeNull();
-    expect((await second.rooms.activeRoom(a.player.id))?.matchId ?? null).toBeNull();
+    // The finished match stays linked for its participants so clients reload
+    // into the recorded result and the rematch flow.
+    expect(lobby.matchId).toBe(match.matchId);
+    expect((await second.rooms.activeRoom(a.player.id))?.matchId ?? null).toBe(match.matchId);
     await second.rooms.join(room.id, outsider.player);
     const rejoined = await second.rooms.view(room.id, outsider.player.id);
     expect(rejoined.phase).toBe('waiting');
+    // A player who joined after the finish is not a match participant: the
+    // room must not hand out a matchId whose match they are forbidden to read.
     expect(rejoined.matchId).toBeNull();
+    await expect(second.rooms.match(match.matchId, outsider.player.id)).rejects.toThrow();
     let version = rejoined.version;
     for (const player of [a.player, b.player, outsider.player]) {
       version++;

@@ -18,6 +18,10 @@ export class PlatformService {
   private readonly startedAt: number;
   private readonly recoveryId = randomUUID();
   private lastStakeReconcile = 0;
+  /** Round-robin cursor so tickTimers bounds work per pass: restoring every
+   * active match each second does not scale once stale matches accumulate. */
+  private tickCursor = 0;
+  private static readonly TICK_BATCH = 150;
   constructor(readonly db: PrismaClient, readonly games: GameRegistry, private readonly now = Date.now, private readonly economy: StakesBridge | null = null, private readonly stakesEnabled = false) { this.startedAt = now(); }
   private async room(tx: Tx, id: string) {
     const row = await tx.roomSnapshot.findUnique({ where: { id } });
@@ -62,7 +66,14 @@ export class PlatformService {
     const { row, state } = await this.room(this.db, id);
     const room = this.domain(state).view(id, actorId);
     const members = await this.db.roomMember.findMany({ where: { roomId: id, leftAt: null } });
-    return { ...room, phase: row.status === 'playing' ? 'playing' : 'waiting', matchId: row.status === 'playing' ? row.activeMatchId : null,
+    // activeMatchId intentionally survives the finish: participants reload into
+    // the recorded result (and rematch flow) instead of losing the match.
+    // It is only exposed to match participants — a late joiner must not receive
+    // a matchId whose match they are forbidden to read (that would wedge the
+    // client's subscribe/sync handshake waiting for a match:state that never
+    // arrives).
+    const matchId = row.activeMatchId && await this.db.matchParticipant.findUnique({ where: { matchId_playerId: { matchId: row.activeMatchId, playerId: actorId } }, select: { matchId: true } }) ? row.activeMatchId : null;
+    return { ...room, phase: row.status === 'playing' ? 'playing' : 'waiting', matchId,
       members: room.members.map(member => ({ ...member, connected: members.some(m => m.playerId === member.player.id && this.now() - m.lastSeenAt.getTime() < 45000) })) };
   }
   async activeRoom(actorId: string): Promise<RoomView | null> {
@@ -226,7 +237,7 @@ export class PlatformService {
       const module = this.games.getModule(room.gameId);
       const nextId = randomUUID();
       const seed = randomInt(0, 2147483647);
-      const runtime = new MatchRuntime(module, room.settings, { players: room.members.map(m => m.player.id), seed, startedAt: this.now() }, id, nextId);
+      const runtime = new MatchRuntime(module, room.settings, { players: room.members.map(m => m.player.id), seed, startedAt: this.now(), hostId: room.hostId }, id, nextId);
       await tx.matchSnapshot.create({ data: { id: nextId, roomId: id, gameId: room.gameId, stateVersion: module.stateVersion, version: 0, seed, state: json(runtime.snapshot()), status: 'active', participants: { create: room.members.map(m => ({ playerId: m.player.id })) } } });
       if (escrowOpId) for (const member of room.members) {
         await tx.economyOperation.create({ data: { id: randomUUID(), idempotencyKey: 'hold:' + hash(escrowOpId + ':' + member.player.id), playerId: member.player.id, matchId: nextId, kind: 'stake_hold', status: 'reserved', externalReference: JSON.stringify({ op: escrowOpId, stake: stake!.amount }) } });
@@ -301,6 +312,8 @@ export class PlatformService {
       const roomRow = await tx.roomSnapshot.findUnique({ where: { id: row.roomId } });
       if (roomRow && roomRow.status === 'playing' && roomRow.activeMatchId === id) {
         const { state } = await this.room(tx, row.roomId);
+        // The checkpoint is unrestorable, so there is no result to reload:
+        // detach it from the room instead of leaving a matchId clients cannot fetch.
         await tx.roomSnapshot.update({ where: { id: row.roomId }, data: { status: 'waiting', activeMatchId: null, state: json({ ...state, version: roomRow.version + 1, members: state.members.map(m => ({ ...m, ready: false })) }), version: roomRow.version + 1 } });
       }
       await tx.recoveryEvent.create({ data: { id: randomUUID(), roomId: row.roomId, matchId: id, kind: 'match_quarantined' } });
@@ -343,10 +356,20 @@ export class PlatformService {
   }
   async tickTimers(): Promise<{ failures: { matchId: string; errorName: string }[]; finished: { matchId: string; roomId: string }[] }> {
     const timedGames = this.games.list().filter(g => g.status === 'ready' && this.games.getModule(g.id).getSystemAction).map(g => g.id);
-    const matches = await this.db.matchSnapshot.findMany({ where: { status: 'active', gameId: { in: timedGames } }, select: { id: true } });
+    const matches = await this.db.matchSnapshot.findMany({ where: { status: 'active', gameId: { in: timedGames } }, orderBy: { createdAt: 'asc' }, select: { id: true } });
+    // Bound per-pass work: with more active matches than the batch size, each
+    // match is visited at most once per ceil(N/BATCH) seconds — timeout
+    // latency grows slightly, but one wedged/stale match can no longer starve
+    // every other table's timers.
+    let batch = matches;
+    if (matches.length > PlatformService.TICK_BATCH) {
+      const start = this.tickCursor % matches.length;
+      batch = [...matches.slice(start), ...matches.slice(0, start)].slice(0, PlatformService.TICK_BATCH);
+      this.tickCursor = (start + PlatformService.TICK_BATCH) % matches.length;
+    }
     const failures: { matchId: string; errorName: string }[] = [];
     const finished: { matchId: string; roomId: string }[] = [];
-    for (const match of matches) {
+    for (const match of batch) {
       try { const done = await this.tickMatch(match.id); if (done) { await this.settleMatch(done.matchId); finished.push(done); } }
       catch (error) {
         // One damaged checkpoint or clock anomaly must not stop every other table.
@@ -483,7 +506,7 @@ export class PlatformService {
           });
         }
         const { state, row: roomRow } = await this.room(tx, row.roomId);
-        await tx.roomSnapshot.update({ where: { id: row.roomId }, data: { status: 'waiting', activeMatchId: null, state: json({ ...state, version: roomRow.version + 1, members: state.members.map(m => ({ ...m, ready: false })) }), version: roomRow.version + 1 } });
+        await tx.roomSnapshot.update({ where: { id: row.roomId }, data: { status: 'waiting', state: json({ ...state, version: roomRow.version + 1, members: state.members.map(m => ({ ...m, ready: false })) }), version: roomRow.version + 1 } });
       }
       return result !== null;
   }

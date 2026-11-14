@@ -84,6 +84,35 @@ describe('describePresence', () => {
     const next = match({ matchId: 'm2', status: 'active', result: null });
     expect(describePresence(ctx({ page: 'room', room: room({ phase: 'playing', matchId: 'm2' }), match: next }))).toMatchObject({ state: 'Идёт партия', largeImage: 'durak_playing' });
   });
+  it('walks the full session: lobby → playing → victory/defeat → waiting result → new match → lobby', () => {
+    const lobbyRoom = room({ phase: 'waiting', matchId: null });
+    const playingRoom = room({ phase: 'playing', matchId: 'm1' });
+    const active = match({ matchId: 'm1', status: 'active', result: null });
+    // Lobby for every game uses its own lobby asset.
+    for (const id of GAME_IDS) {
+      expect(describePresence(ctx({ page: 'room', room: room({ gameId: id }), match: null }))?.largeImage).toBe(id + '_lobby');
+      expect(describePresence(ctx({ page: 'room', room: room({ gameId: id, phase: 'playing', matchId: 'm1' }), match: match({ gameId: id }) }))?.largeImage).toBe(id + '_playing');
+    }
+    // Active match: playing asset + start timestamp, no result image yet.
+    expect(describePresence(ctx({ page: 'room', room: playingRoom, match: active }))).toMatchObject({ state: 'Идёт партия', largeImage: 'durak_playing' });
+    // Match finishes; the server flips the room back to waiting but keeps the
+    // finished MatchView — the result must replace the playing state.
+    const victory = match({ status: 'finished', result: { winners: ['p1', 'p2'], losers: ['p3'], draw: false }, finishedAt: '2026-11-11T13:00:00.000Z' });
+    const afterWin = describePresence(ctx({ page: 'room', room: lobbyRoom, match: victory }));
+    expect(afterWin).toMatchObject({ state: 'Победа в партии', largeImage: 'arcade_victory' });
+    expect(afterWin?.startTimestamp).toBeUndefined();
+    expect(afterWin?.endTimestamp).toBe(Date.parse('2026-11-11T13:00:00.000Z') / 1000);
+    // Same flow for a defeat and a draw on another game.
+    const defeat = match({ gameId: 'uno', status: 'finished', result: { winners: ['p2'], losers: ['p1'], draw: false } });
+    expect(describePresence(ctx({ page: 'room', room: room({ gameId: 'uno' }), match: defeat }))).toMatchObject({ state: 'Поражение в партии', largeImage: 'arcade_defeat' });
+    const draw = match({ gameId: 'mafia', status: 'finished', result: { winners: [], losers: [], draw: true } });
+    expect(describePresence(ctx({ page: 'room', room: room({ gameId: 'mafia' }), match: draw }))).toMatchObject({ state: 'Ничья', largeImage: 'mafia_main' });
+    // A new match in the same room immediately replaces the old result.
+    const rematch = match({ matchId: 'm2', status: 'active', result: null, createdAt: '2026-11-11T14:00:00.000Z' });
+    expect(describePresence(ctx({ page: 'room', room: room({ phase: 'playing', matchId: 'm2' }), match: rematch }))).toMatchObject({ state: 'Идёт партия', largeImage: 'durak_playing' });
+    // Leaving the room drops back to the shared arcade asset.
+    expect(describePresence(ctx({ page: 'home', room: null, match: null }))).toMatchObject({ largeImage: 'arcade_main' });
+  });
   it('ignores matches that belong to another room', () => {
     const foreign = match({ roomId: 'other-room', status: 'finished', result: { winners: ['p1'], losers: [], draw: false } });
     expect(describePresence(ctx({ page: 'room', room: room(), match: foreign }))).toMatchObject({ state: 'Ожидает игроков', largeImage: 'durak_lobby' });
