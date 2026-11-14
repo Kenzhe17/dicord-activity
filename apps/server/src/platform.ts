@@ -226,7 +226,7 @@ export class PlatformService {
       const module = this.games.getModule(room.gameId);
       const nextId = randomUUID();
       const seed = randomInt(0, 2147483647);
-      const runtime = new MatchRuntime(module, room.settings, { players: room.members.map(m => m.player.id), seed, startedAt: this.now() }, id, nextId);
+      const runtime = new MatchRuntime(module, room.settings, { players: room.members.map(m => m.player.id), seed, startedAt: this.now(), hostId: room.hostId }, id, nextId);
       await tx.matchSnapshot.create({ data: { id: nextId, roomId: id, gameId: room.gameId, stateVersion: module.stateVersion, version: 0, seed, state: json(runtime.snapshot()), status: 'active', participants: { create: room.members.map(m => ({ playerId: m.player.id })) } } });
       if (escrowOpId) for (const member of room.members) {
         await tx.economyOperation.create({ data: { id: randomUUID(), idempotencyKey: 'hold:' + hash(escrowOpId + ':' + member.player.id), playerId: member.player.id, matchId: nextId, kind: 'stake_hold', status: 'reserved', externalReference: JSON.stringify({ op: escrowOpId, stake: stake!.amount }) } });

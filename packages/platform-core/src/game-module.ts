@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type { GameInfo } from '@rize/shared';
 
-export interface GameContext { readonly players: readonly string[]; readonly seed: number; readonly startedAt: number }
+export interface GameContext { readonly players: readonly string[]; readonly seed: number; readonly startedAt: number; readonly hostId?: string | undefined }
 export interface ActionContext { readonly actorId: string; readonly now: number }
 export interface GameResult { readonly winners: readonly string[]; readonly losers: readonly string[]; readonly draw: boolean }
 export type Legality = { readonly allowed: true } | { readonly allowed: false; readonly reason: string };

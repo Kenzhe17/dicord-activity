@@ -5,7 +5,7 @@ import { z } from 'zod';
 const checkpointSchema = z.object({
   gameId: z.string(), stateVersion: z.number().int().positive(), version: z.number().int().nonnegative(),
   roomId: z.uuid(), matchId: z.uuid(), settings: z.unknown(), serialized: z.string(),
-  context: z.object({ players: z.array(z.string()).min(2).max(32), seed: z.number().int(), startedAt: z.number().finite().nonnegative() }),
+  context: z.object({ players: z.array(z.string()).min(2).max(32), seed: z.number().int(), startedAt: z.number().finite().nonnegative(), hostId: z.string().optional() }),
   actions: z.array(z.object({ requestId: z.uuid(), actorId: z.string(), version: z.number().int().positive(), now: z.number().finite().nonnegative(), action: z.unknown(), system: z.boolean().optional() })).max(100000),
 });
 export type MatchCheckpoint = z.infer<typeof checkpointSchema>;

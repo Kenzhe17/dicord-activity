@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@rize/discord": "workspace:*",
+    "@rize/codenames": "workspace:*",
     "@rize/durak": "workspace:*",
     "@rize/shared": "workspace:*",
     "@rize/ui": "workspace:*",
